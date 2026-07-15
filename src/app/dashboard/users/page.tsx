@@ -17,7 +17,7 @@ export default function UsersPage() {
   
   // Pagination state
   const [page, setPage] = useState(1);
-  const [pagination, setPagination] = useState({ total: 0, pages: 1, limit: 10 });
+  const [pagination, setPagination] = useState({ page: 1, total: 0, pages: 1, limit: 10 });
 
   // Dialog state
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -30,6 +30,11 @@ export default function UsersPage() {
   const [addName, setAddName] = useState('');
   const [addEmail, setAddEmail] = useState('');
   const [addPassword, setAddPassword] = useState('aimeal@P@assword');
+  const [addPhone, setAddPhone] = useState('');
+  const [addPlanId, setAddPlanId] = useState('00000000-0000-0000-0000-000000000001');
+  const [addBillingCycle, setAddBillingCycle] = useState('monthly');
+  const [addPlanStartDate, setAddPlanStartDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [addPlanEndDate, setAddPlanEndDate] = useState('');
   const [adding, setAdding] = useState(false);
 
   const handleAddUser = async (e: React.FormEvent) => {
@@ -53,7 +58,12 @@ export default function UsersPage() {
         body: JSON.stringify({
           name: addName,
           email: addEmail,
-          password: addPassword
+          password: addPassword,
+          phone: addPhone,
+          planId: addPlanId,
+          planStartDate: addPlanStartDate || null,
+          planEndDate: addPlanEndDate || null,
+          billingCycle: addPlanId !== '00000000-0000-0000-0000-000000000001' ? addBillingCycle : null
         })
       });
 
@@ -202,6 +212,11 @@ export default function UsersPage() {
             setAddName('');
             setAddEmail('');
             setAddPassword('aimeal@P@assword');
+            setAddPhone('');
+            setAddPlanId('00000000-0000-0000-0000-000000000001');
+            setAddBillingCycle('monthly');
+            setAddPlanStartDate(new Date().toISOString().split('T')[0]);
+            setAddPlanEndDate('');
             setShowAddModal(true);
           }}
         >
@@ -424,48 +439,127 @@ export default function UsersPage() {
       {/* Add User Modal */}
       {showAddModal && (
         <div className="modal-overlay">
-          <div className="modal-content animate-fade-in" style={{ maxWidth: '450px' }}>
+          <div className="modal-content animate-fade-in" style={{ maxWidth: '550px' }}>
             <h3 className="title-medium">Add New User</h3>
             <p style={{ margin: '0.5rem 0 1.25rem 0', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-              Create a new user account in authentication and initialize their profile.
+              Create a new user account, initialize their profile, and set up their subscription.
             </p>
             <form onSubmit={handleAddUser}>
-              <div className="form-group" style={{ marginBottom: '1rem' }}>
-                <label className="form-label" htmlFor="add-name">Full Name</label>
-                <input
-                  id="add-name"
-                  type="text"
-                  placeholder="John Doe"
-                  value={addName}
-                  onChange={(e) => setAddName(e.target.value)}
-                  className="input-field"
-                />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="add-name">Full Name</label>
+                  <input
+                    id="add-name"
+                    type="text"
+                    placeholder="John Doe"
+                    value={addName}
+                    onChange={(e) => setAddName(e.target.value)}
+                    className="input-field"
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="add-phone">Phone Number</label>
+                  <input
+                    id="add-phone"
+                    type="tel"
+                    placeholder="+96171XXXXXX"
+                    value={addPhone}
+                    onChange={(e) => setAddPhone(e.target.value)}
+                    className="input-field"
+                  />
+                </div>
               </div>
-              <div className="form-group" style={{ marginBottom: '1rem' }}>
-                <label className="form-label" htmlFor="add-email">Email Address</label>
-                <input
-                  id="add-email"
-                  type="email"
-                  placeholder="john.doe@example.com"
-                  value={addEmail}
-                  onChange={(e) => setAddEmail(e.target.value)}
-                  className="input-field"
-                  required
-                />
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="add-email">Email Address</label>
+                  <input
+                    id="add-email"
+                    type="email"
+                    placeholder="john.doe@example.com"
+                    value={addEmail}
+                    onChange={(e) => setAddEmail(e.target.value)}
+                    className="input-field"
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="add-password">Password</label>
+                  <input
+                    id="add-password"
+                    type="password"
+                    placeholder="••••••"
+                    value={addPassword}
+                    onChange={(e) => setAddPassword(e.target.value)}
+                    className="input-field"
+                    required
+                  />
+                </div>
               </div>
-              <div className="form-group" style={{ marginBottom: '1.5rem' }}>
-                <label className="form-label" htmlFor="add-password">Password</label>
-                <input
-                  id="add-password"
-                  type="password"
-                  placeholder="••••••"
-                  value={addPassword}
-                  onChange={(e) => setAddPassword(e.target.value)}
-                  className="input-field"
-                  required
-                />
+
+              <div style={{ borderTop: '1px solid #E2E8F0', margin: '1.5rem 0 1rem 0', paddingTop: '1rem' }}>
+                <h4 style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-dark)', marginBottom: '0.75rem' }}>Subscription Settings</h4>
+                
+                <div className="form-group" style={{ marginBottom: '1rem' }}>
+                  <label className="form-label" htmlFor="add-plan">Select Plan</label>
+                  <select
+                    id="add-plan"
+                    value={addPlanId}
+                    onChange={(e) => setAddPlanId(e.target.value)}
+                    className="input-field"
+                    style={{ width: '100%' }}
+                  >
+                    <option value="00000000-0000-0000-0000-000000000001">Free Plan (14-day Trial)</option>
+                    <option value="e203edfc-8109-4f44-af32-12b5723c1f15">Pro Plan</option>
+                    <option value="7080e55e-0002-494b-ada6-763d74325040">VIP Plan</option>
+                  </select>
+                </div>
+
+                {addPlanId !== '00000000-0000-0000-0000-000000000001' && (
+                  <>
+                    <div className="form-group" style={{ marginBottom: '1rem' }}>
+                      <label className="form-label" htmlFor="add-billing-cycle">Billing Cycle</label>
+                      <select
+                        id="add-billing-cycle"
+                        value={addBillingCycle}
+                        onChange={(e) => setAddBillingCycle(e.target.value)}
+                        className="input-field"
+                        style={{ width: '100%' }}
+                        required
+                      >
+                        <option value="monthly">Monthly</option>
+                        <option value="yearly">Yearly</option>
+                      </select>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                      <div className="form-group">
+                        <label className="form-label" htmlFor="add-start-date">Start Date</label>
+                        <input
+                          id="add-start-date"
+                          type="date"
+                          value={addPlanStartDate}
+                          onChange={(e) => setAddPlanStartDate(e.target.value)}
+                          className="input-field"
+                          required
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label" htmlFor="add-end-date">End Date</label>
+                        <input
+                          id="add-end-date"
+                          type="date"
+                          value={addPlanEndDate}
+                          onChange={(e) => setAddPlanEndDate(e.target.value)}
+                          className="input-field"
+                          required
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.5rem' }}>
                 <button type="button" className="btn btn-outline" onClick={() => setShowAddModal(false)} disabled={adding}>Cancel</button>
                 <button type="submit" className="btn btn-primary" disabled={adding}>
                   {adding ? 'Creating...' : 'Create User'}

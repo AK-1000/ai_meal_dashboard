@@ -150,7 +150,7 @@ export default function UserDetailPage() {
     );
   }
 
-  const { user, subscriptionHistory, paymentHistory, plannedMeals, activity, appLogs } = userData;
+  const { user, subscriptions, payments, healthLogs, appLogs } = userData;
 
   const filteredCountries = countrySearch.trim() === ''
     ? COUNTRIES

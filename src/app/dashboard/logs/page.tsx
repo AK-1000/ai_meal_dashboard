@@ -16,7 +16,7 @@ export default function LogsPage() {
   
   // Pagination
   const [page, setPage] = useState(1);
-  const [pagination, setPagination] = useState({ total: 0, pages: 1, limit: 15 });
+  const [pagination, setPagination] = useState({ page: 1, total: 0, pages: 1, limit: 15 });
 
   // Expanded row state (for app logs details)
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
