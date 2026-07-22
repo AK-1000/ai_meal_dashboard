@@ -9,7 +9,7 @@ export default function PromoCodesPage() {
   const [promoCodes, setPromoCodes] = useState<any[]>([]);
   const [sponsors, setSponsors] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [generating, setGenerating] = useState(false);
+  // DEPRECATED: const [generating, setGenerating] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
 
   // Form states
@@ -81,7 +81,7 @@ export default function PromoCodesPage() {
       });
 
       if (res.ok) {
-        toast.success('Promo code created successfully.');
+        toast.success('Referral code created successfully.');
         resetForm();
         fetchData();
       } else {
@@ -110,7 +110,7 @@ export default function PromoCodesPage() {
       });
 
       if (res.ok) {
-        toast.success(`Promo code ${item.code} status updated.`);
+        toast.success(`Referral code ${item.code} status updated.`);
         fetchData();
       } else {
         toast.error('Failed to toggle active state.');
@@ -122,7 +122,7 @@ export default function PromoCodesPage() {
   };
 
   const handleDeleteCode = async (id: string) => {
-    if (!confirm('Are you sure you want to permanently delete this promo code?')) return;
+    if (!confirm('Are you sure you want to permanently delete this referral code?')) return;
     try {
       const supabase = createClient();
       const { data: { session } } = await supabase.auth.getSession();
@@ -136,7 +136,7 @@ export default function PromoCodesPage() {
       });
 
       if (res.ok) {
-        toast.success('Promo code deleted successfully.');
+        toast.success('Referral code deleted successfully.');
         fetchData();
       } else {
         const err = await res.json();
@@ -148,35 +148,32 @@ export default function PromoCodesPage() {
     }
   };
 
-  const handleTriggerDailyGeneration = async () => {
-    setGenerating(true);
-    try {
-      const supabase = createClient();
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-
-      const res = await fetch('/api/promo-codes/generate', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`
-        }
-      });
-
-      if (res.ok) {
-        const result = await res.json();
-        toast.success('Daily promo codes generated successfully!');
-        fetchData();
-      } else {
-        const err = await res.json();
-        toast.error(err.error || 'Failed to trigger daily generation.');
-      }
-    } catch (err) {
-      console.error(err);
-      toast.error('Error generating daily promo codes.');
-    } finally {
-      setGenerating(false);
-    }
-  };
+  // DEPRECATED: Daily code generation trigger removed.
+  // Referral codes are permanent and do not rotate daily.
+  // const handleTriggerDailyGeneration = async () => {
+  //   setGenerating(true);
+  //   try {
+  //     const supabase = createClient();
+  //     const { data: { session } } = await supabase.auth.getSession();
+  //     if (!session) return;
+  //     const res = await fetch('/api/promo-codes/generate', {
+  //       method: 'POST',
+  //       headers: { 'Authorization': `Bearer ${session.access_token}` }
+  //     });
+  //     if (res.ok) {
+  //       toast.success('Daily promo codes generated successfully!');
+  //       fetchData();
+  //     } else {
+  //       const err = await res.json();
+  //       toast.error(err.error || 'Failed to trigger daily generation.');
+  //     }
+  //   } catch (err) {
+  //     console.error(err);
+  //     toast.error('Error generating daily promo codes.');
+  //   } finally {
+  //     setGenerating(false);
+  //   }
+  // };
 
   const resetForm = () => {
     setShowAddForm(false);
@@ -191,11 +188,12 @@ export default function PromoCodesPage() {
     <div style={styles.container}>
       <div className="flex-between">
         <div>
-          <h1 className="title-large">Promo Codes</h1>
-          <p style={styles.subtitle}>Manage discount codes, view referral usage stats and trigger daily seed operations</p>
+          <h1 className="title-large">Referral Codes</h1>
+          <p style={styles.subtitle}>Manage referral and discount codes for sponsors — codes are permanent by default</p>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem' }}>
-          <button 
+          {/* DEPRECATED: Daily code generation button removed */}
+          {/* <button 
             className="btn btn-outline" 
             style={{ borderColor: 'var(--primary)', color: 'var(--primary-dark)', display: 'flex', gap: '6px' }}
             onClick={handleTriggerDailyGeneration}
@@ -203,7 +201,7 @@ export default function PromoCodesPage() {
           >
             <Sparkles size={16} />
             <span>{generating ? 'Generating Codes...' : 'Trigger Daily Codes'}</span>
-          </button>
+          </button> */}
           {!showAddForm && (
             <button className="btn btn-primary" onClick={() => setShowAddForm(true)}>
               <Plus size={16} />
@@ -215,7 +213,7 @@ export default function PromoCodesPage() {
 
       {showAddForm && (
         <div className="card animate-fade-in" style={{ maxWidth: '700px' }}>
-          <h3 className="title-medium" style={{ marginBottom: '1.5rem' }}>Create Promo Code</h3>
+          <h3 className="title-medium" style={{ marginBottom: '1.5rem' }}>Create Referral Code</h3>
           <form onSubmit={handleSavePromoCode} style={styles.formGrid}>
             <div className="form-group">
               <label className="form-label" htmlFor="code-name">Discount Code (E.g. DIET50)</label>
@@ -260,7 +258,7 @@ export default function PromoCodesPage() {
             </div>
 
             <div className="form-group">
-              <label className="form-label" htmlFor="code-expiry">Expiration Date</label>
+              <label className="form-label" htmlFor="code-expiry">Expiration Date (leave empty for never expires)</label>
               <input
                 id="code-expiry"
                 type="datetime-local"
@@ -283,7 +281,7 @@ export default function PromoCodesPage() {
 
             <div style={{ gridColumn: 'span 2', display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.5rem' }}>
               <button type="button" className="btn btn-outline" onClick={resetForm}>Cancel</button>
-              <button type="submit" className="btn btn-primary">Save Promo Code</button>
+              <button type="submit" className="btn btn-primary">Save Referral Code</button>
             </div>
           </form>
         </div>
@@ -293,7 +291,7 @@ export default function PromoCodesPage() {
       {loading ? (
         <div style={styles.loadingContainer}>
           <div style={styles.spinner}></div>
-          <p>Loading promo codes...</p>
+          <p>Loading referral codes...</p>
         </div>
       ) : (
         <div className="table-container">
@@ -312,7 +310,7 @@ export default function PromoCodesPage() {
               {promoCodes.length === 0 ? (
                 <tr>
                   <td colSpan={6} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-secondary)' }}>
-                    No promo codes found. Click Create Code to manually generate one.
+                    No referral codes found. Click Create Code to add one.
                   </td>
                 </tr>
               ) : (

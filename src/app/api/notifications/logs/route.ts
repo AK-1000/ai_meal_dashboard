@@ -4,11 +4,22 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 
 export const GET = withAdminAuth(async (req: NextRequest) => {
   try {
-    const { data: logs, error } = await supabaseAdmin
+    const searchParams = req.nextUrl.searchParams;
+    const notificationType = searchParams.get('type') || '';
+    const limit = parseInt(searchParams.get('limit') || '50');
+
+    let query = supabaseAdmin
       .from('notification_logs')
-      .select('*, users(email)')
+      .select('*, users(email, name)')
       .order('sent_at', { ascending: false })
-      .limit(50);
+      .limit(limit);
+
+    // Filter by notification type if specified
+    if (notificationType) {
+      query = query.eq('notification_type', notificationType);
+    }
+
+    const { data: logs, error } = await query;
 
     if (error) throw error;
 

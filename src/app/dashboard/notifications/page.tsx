@@ -65,19 +65,26 @@ export default function NotificationsPage() {
           return;
         }
 
-        // Query user ID by email via client
-        const supabase = createClient();
-        const { data: userData, error } = await supabase
-          .from('users')
-          .select('id')
-          .eq('email', userEmail.trim())
-          .single();
+        // BUG FIX: Resolve email to user_id via server-side API (bypasses RLS)
+        // Previously used browser Supabase client which failed due to RLS policies
+        const resolveRes = await fetch('/api/users/resolve', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`
+          },
+          body: JSON.stringify({ email: userEmail.trim() })
+        });
 
-        if (error || !userData) {
-          toast.error('User not found in database.');
+        const resolveData = await resolveRes.json();
+
+        if (!resolveRes.ok || !resolveData.user) {
+          toast.error(resolveData.error || 'User not found in database.');
           setSending(false);
           return;
         }
+
+        const userId = resolveData.user.id;
 
         const res = await fetch('/api/notifications/send', {
           method: 'POST',
@@ -85,7 +92,7 @@ export default function NotificationsPage() {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${session.access_token}`
           },
-          body: JSON.stringify({ userId: userData.id, title, body })
+          body: JSON.stringify({ userId, title, body })
         });
 
         if (res.ok) {

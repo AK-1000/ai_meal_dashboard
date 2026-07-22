@@ -13,6 +13,8 @@ export default function LogsPage() {
   // App log filters
   const [search, setSearch] = useState('');
   const [severity, setSeverity] = useState('');
+  const [logCategory, setLogCategory] = useState('');
+  const [source, setSource] = useState('');
   
   // Pagination
   const [page, setPage] = useState(1);
@@ -34,7 +36,9 @@ export default function LogsPage() {
           page: page.toString(),
           limit: '15',
           search,
-          severity
+          severity,
+          category: logCategory,
+          source,
         });
         url = `/api/logs/app?${query.toString()}`;
       } else {
@@ -62,7 +66,7 @@ export default function LogsPage() {
     } finally {
       setLoading(false);
     }
-  }, [logType, page, search, severity]);
+  }, [logType, page, search, severity, logCategory, source]);
 
   useEffect(() => {
     setLogs([]);
@@ -79,6 +83,8 @@ export default function LogsPage() {
   const handleResetFilters = () => {
     setSearch('');
     setSeverity('');
+    setLogCategory('');
+    setSource('');
     setPage(1);
   };
 
@@ -119,12 +125,36 @@ export default function LogsPage() {
       {/* Filters (App Logs only) */}
       {logType === 'app' && (
         <div className="card" style={styles.filterCard}>
+          {/* Category Tabs */}
+          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+            {[
+              { label: 'All', value: '' },
+              { label: 'Application', value: 'application' },
+              { label: 'Warnings', value: 'warning' },
+              { label: 'Errors', value: 'error' },
+              { label: 'User Activity', value: 'user_activity' },
+            ].map(cat => (
+              <button
+                key={cat.value}
+                style={{
+                  ...styles.toggleBtn,
+                  ...(logCategory === cat.value ? styles.toggleBtnActive : {}),
+                  padding: '0.4rem 0.85rem',
+                  fontSize: '0.8rem',
+                }}
+                onClick={() => { setLogCategory(cat.value); setPage(1); }}
+              >
+                {cat.label}
+              </button>
+            ))}
+          </div>
+
           <form onSubmit={handleSearchSubmit} style={styles.filterForm}>
             <div style={styles.searchContainer}>
               <Search size={18} style={styles.searchIcon} />
               <input
                 type="text"
-                placeholder="Search by user email or error text..."
+                placeholder="Search by user email, error text, or screen name..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 style={styles.searchInput}
@@ -143,6 +173,18 @@ export default function LogsPage() {
                 <option value="warning">Warning</option>
                 <option value="info">Info</option>
                 <option value="success">Success</option>
+              </select>
+
+              <select
+                value={source}
+                onChange={(e) => { setSource(e.target.value); setPage(1); }}
+                className="input-field"
+                style={styles.select}
+              >
+                <option value="">All Sources</option>
+                <option value="flutter">Flutter</option>
+                <option value="dashboard">Dashboard</option>
+                <option value="backend">Backend</option>
               </select>
 
               <button type="submit" className="btn btn-primary">Search</button>
@@ -169,6 +211,7 @@ export default function LogsPage() {
                       <th>Time</th>
                       <th>User</th>
                       <th>Severity</th>
+                      <th>Source</th>
                       <th>Screen</th>
                       <th>Message</th>
                       <th style={{ textAlign: 'right' }}>Details</th>
@@ -177,7 +220,7 @@ export default function LogsPage() {
                   <tbody>
                     {logs.length === 0 ? (
                       <tr>
-                        <td colSpan={6} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-secondary)' }}>
+                        <td colSpan={7} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-secondary)' }}>
                           No application logs matches the search criteria.
                         </td>
                       </tr>
@@ -186,16 +229,29 @@ export default function LogsPage() {
                         <React.Fragment key={log.id}>
                           <tr>
                             <td>{new Date(log.created_at).toLocaleString()}</td>
-                            <td>{log.user_email || 'guest@aimeal.com'}</td>
+                            <td>{log.user_email || <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Guest</span>}</td>
                             <td>
                               <span className={`badge ${
                                 log.severity === 'error' ? 'badge-error' : 
-                                log.severity === 'warning' ? 'badge-warning' : 'badge-info'
+                                log.severity === 'warning' ? 'badge-warning' : 
+                                log.severity === 'success' ? 'badge-success' : 'badge-info'
                               }`}>
                                 {log.severity || 'info'}
                               </span>
                             </td>
-                            <td><strong>{log.screen_name || 'N/A'}</strong></td>
+                            <td>
+                              <span className="badge" style={{ 
+                                fontSize: '0.7rem', 
+                                textTransform: 'capitalize',
+                                backgroundColor: log.source === 'flutter' ? 'rgba(99, 102, 241, 0.1)' : 
+                                                 log.source === 'backend' ? 'rgba(245, 158, 11, 0.1)' : 'rgba(76, 175, 80, 0.1)',
+                                color: log.source === 'flutter' ? '#6366F1' : 
+                                       log.source === 'backend' ? '#F59E0B' : '#22C55E',
+                              }}>
+                                {log.source || 'unknown'}
+                              </span>
+                            </td>
+                            <td><strong>{log.screen_name || <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>—</span>}</strong></td>
                             <td style={{ maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                               {log.error_message}
                             </td>
@@ -207,19 +263,36 @@ export default function LogsPage() {
                           </tr>
                           {expandedLogId === log.id && (
                             <tr>
-                              <td colSpan={6} style={{ backgroundColor: '#F8F9FA', padding: '1.5rem' }}>
+                              <td colSpan={7} style={{ backgroundColor: '#F8F9FA', padding: '1.5rem' }}>
                                 <div style={styles.expandedLog}>
                                   <h4 style={{ fontWeight: 700, marginBottom: '0.5rem' }}>Error Details</h4>
                                   <p style={{ fontWeight: 600, color: 'var(--text-dark)', marginBottom: '0.75rem' }}>{log.error_message}</p>
                                   {log.error_details && (
                                     <pre style={styles.logPre}>{log.error_details}</pre>
                                   )}
+                                  {log.stack_trace && (
+                                    <div style={{ marginTop: '1rem' }}>
+                                      <h5 style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Stack Trace</h5>
+                                      <pre style={styles.logPre}>{log.stack_trace}</pre>
+                                    </div>
+                                  )}
+                                  {log.device_info && (
+                                    <div style={{ marginTop: '1rem' }}>
+                                      <h5 style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Device Info</h5>
+                                      <pre style={styles.jsonPre}>{JSON.stringify(log.device_info, null, 2)}</pre>
+                                    </div>
+                                  )}
                                   {log.extra_data && (
                                     <div style={{ marginTop: '1rem' }}>
-                                      <h5 style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Metadata JSON</h5>
+                                      <h5 style={{ fontWeight: 700, fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Metadata JSON</h5>
                                       <pre style={styles.jsonPre}>{JSON.stringify(log.extra_data, null, 2)}</pre>
                                     </div>
                                   )}
+                                  <div style={{ marginTop: '0.75rem', display: 'flex', gap: '1.5rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                                    <span>Category: <strong style={{ textTransform: 'capitalize' }}>{log.log_category || '—'}</strong></span>
+                                    <span>Source: <strong style={{ textTransform: 'capitalize' }}>{log.source || '—'}</strong></span>
+                                    <span>User ID: <strong style={{ fontFamily: 'monospace' }}>{log.user_id || '—'}</strong></span>
+                                  </div>
                                 </div>
                               </td>
                             </tr>

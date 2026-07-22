@@ -9,6 +9,8 @@ export const GET = withAdminAuth(async (req: NextRequest) => {
     const limit = parseInt(searchParams.get('limit') || '15');
     const search = searchParams.get('search') || '';
     const severity = searchParams.get('severity') || '';
+    const logCategory = searchParams.get('category') || '';
+    const source = searchParams.get('source') || '';
 
     const offset = (page - 1) * limit;
 
@@ -16,12 +18,24 @@ export const GET = withAdminAuth(async (req: NextRequest) => {
       .from('app_logs')
       .select('*', { count: 'exact' });
 
+    // Search filter
     if (search) {
-      query = query.or(`user_email.ilike.%${search}%,error_message.ilike.%${search}%`);
+      query = query.or(`user_email.ilike.%${search}%,error_message.ilike.%${search}%,screen_name.ilike.%${search}%`);
     }
 
+    // Severity filter
     if (severity) {
       query = query.eq('severity', severity);
+    }
+
+    // Log category filter
+    if (logCategory) {
+      query = query.eq('log_category', logCategory);
+    }
+
+    // Source filter
+    if (source) {
+      query = query.eq('source', source);
     }
 
     const { data: logs, count, error } = await query

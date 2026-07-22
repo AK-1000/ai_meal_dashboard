@@ -114,9 +114,70 @@ export interface PromoCode {
   discount_percentage: number;
   is_active: boolean;
   expires_at?: string;
+  code_type: 'referral' | 'promo';
+  max_uses?: number;
+  never_expires: boolean;
+  total_uses: number;
+  unique_users_count: number;
   created_at: string;
   sponsor?: {
     name: string;
+  };
+}
+
+export interface ReferralTracking {
+  id: string;
+  sponsor_id: string;
+  referral_code_id: string;
+  referred_user_id: string;
+  referral_type: 'signup' | 'payment';
+  payment_status: 'unpaid' | 'paid';
+  paid_in_payment_id?: string;
+  commission_amount: number;
+  original_payment_amount?: number;
+  metadata?: any;
+  created_at: string;
+  updated_at: string;
+  sponsors?: {
+    id: string;
+    name: string;
+    code_prefix: string;
+    commission_percentage: number;
+  };
+  promo_codes?: {
+    id: string;
+    code: string;
+    discount_percentage: number;
+  };
+  users?: {
+    id: string;
+    email: string;
+    name?: string;
+    created_at: string;
+  };
+}
+
+export interface SponsorPayment {
+  id: string;
+  sponsor_id: string;
+  amount: number;
+  currency: string;
+  referrals_covered: number;
+  payment_method: 'manual' | 'bank_transfer' | 'other';
+  notes?: string;
+  paid_by_admin_id?: string;
+  period_start?: string;
+  period_end?: string;
+  created_at: string;
+  sponsors?: {
+    id: string;
+    name: string;
+    code_prefix: string;
+    contact_email: string;
+  };
+  admin_users?: {
+    id: string;
+    email: string;
   };
 }
 
@@ -127,8 +188,12 @@ export interface AppLog {
   screen_name?: string;
   error_message: string;
   error_details?: string;
+  stack_trace?: string;
+  device_info?: any;
   extra_data?: any;
   severity: 'info' | 'warning' | 'error' | 'success';
+  log_category: 'application' | 'warning' | 'error' | 'user_activity';
+  source: 'flutter' | 'dashboard' | 'backend';
   created_at: string;
 }
 
@@ -145,3 +210,4 @@ export interface Meal {
   image_url?: string;
   created_at: string;
 }
+

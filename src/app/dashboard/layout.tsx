@@ -18,7 +18,9 @@ import {
   LogOut, 
   Menu, 
   X, 
-  ShieldAlert 
+  ShieldAlert,
+  Link2,
+  Wallet
 } from 'lucide-react';
 
 const navItems = [
@@ -27,12 +29,15 @@ const navItems = [
   { name: 'Subscriptions', href: '/dashboard/subscriptions', icon: CreditCard },
   { name: 'Payments', href: '/dashboard/payments', icon: DollarSign },
   { name: 'Sponsors', href: '/dashboard/sponsors', icon: Award },
-  { name: 'Promo Codes', href: '/dashboard/promo-codes', icon: Ticket },
+  { name: 'Referral Codes', href: '/dashboard/promo-codes', icon: Ticket },
+  { name: 'Referral Tracking', href: '/dashboard/referral-tracking', icon: Link2 },
+  { name: 'Sponsor Payments', href: '/dashboard/sponsor-payments', icon: Wallet },
   { name: 'Notifications', href: '/dashboard/notifications', icon: Bell },
   { name: 'Meals', href: '/dashboard/meals', icon: Utensils },
   { name: 'Logs & Audits', href: '/dashboard/logs', icon: FileText },
   { name: 'Settings', href: '/dashboard/settings', icon: Settings },
 ];
+
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { admin, loading, logout } = useAuth();
