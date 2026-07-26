@@ -19,8 +19,8 @@ export const GET = withAdminAuth(async (req: NextRequest) => {
       .from('referral_tracking')
       .select(`
         *,
-        sponsors:sponsor_id (id, name, code_prefix, commission_percentage),
-        promo_codes:referral_code_id (id, code, discount_percentage),
+        sponsors:sponsor_id (id, name, code_prefix, commission_percentage, discount_percentage, status),
+        promo_codes:referral_code_id (id, code),
         users:referred_user_id (id, email, name, created_at)
       `, { count: 'exact' });
 
@@ -44,7 +44,6 @@ export const GET = withAdminAuth(async (req: NextRequest) => {
     }
 
     if (search) {
-      // Search by user email or referral code
       query = query.or(`users.email.ilike.%${search}%`);
     }
 
@@ -54,54 +53,47 @@ export const GET = withAdminAuth(async (req: NextRequest) => {
 
     if (error) throw error;
 
-    // Get summary stats
-    const { data: summaryData, error: summaryError } = await supabaseAdmin
-      .from('referral_tracking')
-      .select('sponsor_id, payment_status, commission_amount')
-      .eq(sponsorId ? 'sponsor_id' : 'id', sponsorId || '');
-
-    // Build sponsor summary
+    // Build sponsor summary for ALL sponsors
     let sponsorSummary: any[] = [];
-    if (!sponsorId) {
-      const { data: sponsors, error: sponsorsErr } = await supabaseAdmin
-        .from('sponsors')
-        .select('id, name, code_prefix, commission_percentage')
-        .eq('is_active', true);
+    const { data: sponsors, error: sponsorsErr } = await supabaseAdmin
+      .from('sponsors')
+      .select('id, name, code_prefix, commission_percentage, discount_percentage, status')
+      .order('name');
 
-      if (!sponsorsErr && sponsors) {
-        const summaryPromises = sponsors.map(async (sponsor: any) => {
-          const { count: totalRefs } = await supabaseAdmin
-            .from('referral_tracking')
-            .select('*', { count: 'exact', head: true })
-            .eq('sponsor_id', sponsor.id);
+    if (!sponsorsErr && sponsors) {
+      const summaryPromises = sponsors.map(async (sponsor: any) => {
+        const { count: totalRefs } = await supabaseAdmin
+          .from('referral_tracking')
+          .select('*', { count: 'exact', head: true })
+          .eq('sponsor_id', sponsor.id);
 
-          const { count: paidRefs } = await supabaseAdmin
-            .from('referral_tracking')
-            .select('*', { count: 'exact', head: true })
-            .eq('sponsor_id', sponsor.id)
-            .eq('payment_status', 'paid');
+        const { count: paidRefs } = await supabaseAdmin
+          .from('referral_tracking')
+          .select('*', { count: 'exact', head: true })
+          .eq('sponsor_id', sponsor.id)
+          .eq('payment_status', 'paid');
 
-          const { count: unpaidRefs } = await supabaseAdmin
-            .from('referral_tracking')
-            .select('*', { count: 'exact', head: true })
-            .eq('sponsor_id', sponsor.id)
-            .eq('payment_status', 'unpaid');
+        const { count: unpaidRefs } = await supabaseAdmin
+          .from('referral_tracking')
+          .select('*', { count: 'exact', head: true })
+          .eq('sponsor_id', sponsor.id)
+          .eq('payment_status', 'unpaid');
 
-          return {
-            ...sponsor,
-            totalReferrals: totalRefs || 0,
-            paidReferrals: paidRefs || 0,
-            unpaidReferrals: unpaidRefs || 0,
-          };
-        });
+        return {
+          ...sponsor,
+          totalReferrals: totalRefs || 0,
+          paidReferrals: paidRefs || 0,
+          unpaidReferrals: unpaidRefs || 0,
+        };
+      });
 
-        sponsorSummary = await Promise.all(summaryPromises);
-      }
+      sponsorSummary = await Promise.all(summaryPromises);
     }
 
     return NextResponse.json({
       referrals,
       sponsorSummary,
+      allSponsors: sponsors || [],
       pagination: {
         page,
         limit,

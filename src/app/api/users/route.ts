@@ -15,7 +15,7 @@ export const GET = withAdminAuth(async (req: NextRequest) => {
 
     let query = supabaseAdmin
       .from('users')
-      .select('*', { count: 'exact' });
+      .select('*, sponsors:referred_by_sponsor_id(name, code_prefix)', { count: 'exact' });
 
     if (search) {
       query = query.or(`email.ilike.%${search}%,name.ilike.%${search}%`);
@@ -52,13 +52,13 @@ export const GET = withAdminAuth(async (req: NextRequest) => {
 
 export const POST = withAdminAuth(async (req: NextRequest, admin) => {
   try {
-    const { name, email, password, phone, planId, planStartDate, planEndDate, billingCycle } = await req.json();
+    const { name, email, password, phone, planId, planStartDate, planEndDate, billingCycle, sponsorId } = await req.json();
 
     if (!email || !password) {
       return NextResponse.json({ error: 'Email and password are required' }, { status: 400 });
     }
 
-    // Create user in Supabase Auth using Admin API
+    // Create user in Supabase Auth using Admin API (always email_confirm: true)
     const { data: userData, error: createError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
@@ -70,17 +70,11 @@ export const POST = withAdminAuth(async (req: NextRequest, admin) => {
       throw createError || new Error('Failed to create user in Auth');
     }
 
-    // Since the database trigger on_auth_user_created automatically creates a profile and a subscription row,
-    // we fetch the generated current_subscription_id and update it.
-    const { data: userProfile, error: profileFetchError } = await supabaseAdmin
+    const { data: userProfile } = await supabaseAdmin
       .from('users')
       .select('current_subscription_id')
       .eq('id', userData.user.id)
       .single();
-
-    if (profileFetchError) {
-      console.error('Error fetching user profile after creation:', profileFetchError);
-    }
 
     const currentSubId = userProfile?.current_subscription_id;
 
@@ -95,19 +89,17 @@ export const POST = withAdminAuth(async (req: NextRequest, admin) => {
       status = 'active';
     }
 
-    // Determine trial end date for free plan, and normal end date / billing cycle for paid plans
     let calculatedEndDate = planEndDate;
     let actualBillingCycle = billingCycle;
 
     if (planId === '00000000-0000-0000-0000-000000000001') {
-      // Free plan defaults to 14 days trial
       const start = planStartDate ? new Date(planStartDate) : new Date();
       const end = new Date(start.getTime() + 14 * 24 * 60 * 60 * 1000);
       calculatedEndDate = end.toISOString().split('T')[0];
       actualBillingCycle = null;
     }
 
-    // Update the subscription row if it exists
+    // Update subscription row if exists
     if (currentSubId) {
       const subUpdate: any = {
         plan_id: planId,
@@ -115,7 +107,7 @@ export const POST = withAdminAuth(async (req: NextRequest, admin) => {
         billing_cycle: actualBillingCycle,
         updated_at: new Date().toISOString()
       };
-      
+
       if (planStartDate) {
         subUpdate.created_at = new Date(planStartDate).toISOString();
         subUpdate.current_period_start = new Date(planStartDate).toISOString();
@@ -126,19 +118,16 @@ export const POST = withAdminAuth(async (req: NextRequest, admin) => {
         subUpdate.current_period_end = null;
       }
 
-      const { error: subUpdateError } = await supabaseAdmin
+      await supabaseAdmin
         .from('user_subscriptions')
         .update(subUpdate)
         .eq('id', currentSubId);
-
-      if (subUpdateError) {
-        console.error('Error updating user subscription:', subUpdateError);
-      }
     }
 
-    // Update the user profile with phone and plan details
+    // Update user profile in public.users
     const userUpdate: any = {
-      phone_number: phone || null,
+      name: name || '',
+      email_verified: true, // ALWAYS VERIFIED when created by admin
       subscription_tier: tier,
       subscription_status: status,
       billing_cycle: actualBillingCycle,
@@ -147,8 +136,37 @@ export const POST = withAdminAuth(async (req: NextRequest, admin) => {
     };
 
     if (phone) {
+      userUpdate.phone_number = phone;
       userUpdate.phone_verified = true;
       userUpdate.phone_verified_at = new Date().toISOString();
+    }
+
+    // Optional sponsor selection
+    if (sponsorId) {
+      userUpdate.referred_by_sponsor_id = sponsorId;
+      userUpdate.referral_date = new Date().toISOString();
+
+      const { data: promoCodeRow } = await supabaseAdmin
+        .from('promo_codes')
+        .select('id')
+        .eq('sponsor_id', sponsorId)
+        .limit(1)
+        .maybeSingle();
+
+      if (promoCodeRow) {
+        userUpdate.first_promo_code_id = promoCodeRow.id;
+      }
+
+      // Record in referral_tracking table
+      await supabaseAdmin.from('referral_tracking').insert({
+        sponsor_id: sponsorId,
+        referral_code_id: promoCodeRow?.id || null,
+        referred_user_id: userData.user.id,
+        referral_type: 'signup',
+        payment_status: 'unpaid',
+        commission_amount: 0,
+        metadata: { created_by_admin: true, admin_id: admin.id, created_at: new Date().toISOString() },
+      });
     }
 
     const { error: userUpdateError } = await supabaseAdmin
@@ -160,13 +178,12 @@ export const POST = withAdminAuth(async (req: NextRequest, admin) => {
       console.error('Error updating user profile:', userUpdateError);
     }
 
-    // Log the action in admin_audit_log
     await logAdminAction(
       admin.id,
       'user.create',
       'user',
       userData.user.id,
-      { email, name, phone, subscription_tier: tier },
+      { email, name, phone, subscription_tier: tier, sponsor_id: sponsorId || null },
       req
     );
 
@@ -183,4 +200,3 @@ export const POST = withAdminAuth(async (req: NextRequest, admin) => {
     return NextResponse.json({ error: err.message || 'Failed to create user' }, { status: 500 });
   }
 }, ['super_admin', 'content_manager']);
-

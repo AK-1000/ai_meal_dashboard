@@ -11,7 +11,7 @@ export default function SponsorsPage() {
   const [editingSponsor, setEditingSponsor] = useState<any | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
 
-  // Form states
+  // Form states initialized to empty strings / defaults (never null or undefined)
   const [name, setName] = useState('');
   const [contactEmail, setContactEmail] = useState('');
   const [discountPercentage, setDiscountPercentage] = useState(10);
@@ -63,7 +63,7 @@ export default function SponsorsPage() {
       discount_percentage: Number(discountPercentage),
       commission_percentage: Number(commissionPercentage),
       code_prefix: codePrefix.toUpperCase(),
-      is_active: isActive
+      status: isActive ? 'active' : 'inactive'
     };
 
     try {
@@ -108,12 +108,12 @@ export default function SponsorsPage() {
 
   const handleEditClick = (sponsor: any) => {
     setEditingSponsor(sponsor);
-    setName(sponsor.name);
-    setContactEmail(sponsor.contact_email);
-    setDiscountPercentage(sponsor.discount_percentage);
-    setCommissionPercentage(sponsor.commission_percentage);
-    setCodePrefix(sponsor.code_prefix);
-    setIsActive(sponsor.is_active ?? true);
+    setName(sponsor.name || '');
+    setContactEmail(sponsor.contact_email || '');
+    setDiscountPercentage(sponsor.discount_percentage ?? 10);
+    setCommissionPercentage(sponsor.commission_percentage ?? 5);
+    setCodePrefix(sponsor.code_prefix || '');
+    setIsActive(sponsor.status === 'active' || sponsor.status === true || sponsor.is_active === true);
     setShowAddForm(true);
   };
 
@@ -181,7 +181,7 @@ export default function SponsorsPage() {
               <input
                 id="sponsor-name"
                 type="text"
-                value={name}
+                value={name || ''}
                 onChange={(e) => setName(e.target.value)}
                 className="input-field"
                 required
@@ -194,7 +194,7 @@ export default function SponsorsPage() {
                 id="sponsor-email"
                 type="email"
                 placeholder="partner@company.com"
-                value={contactEmail}
+                value={contactEmail || ''}
                 onChange={(e) => setContactEmail(e.target.value)}
                 className="input-field"
                 required
@@ -207,7 +207,7 @@ export default function SponsorsPage() {
                 id="code-prefix"
                 type="text"
                 placeholder="E.g. KETO, DIET"
-                value={codePrefix}
+                value={codePrefix || ''}
                 onChange={(e) => setCodePrefix(e.target.value.toUpperCase())}
                 className="input-field"
                 maxLength={8}
@@ -256,7 +256,7 @@ export default function SponsorsPage() {
 
             <div style={{ gridColumn: 'span 2', display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.5rem' }}>
               <button type="button" className="btn btn-outline" onClick={resetForm}>Cancel</button>
-              <button type="submit" className="btn btn-primary">Save Partner</button>
+              <button type="submit" className="btn btn-primary">{editingSponsor ? 'Update Partner' : 'Save Partner'}</button>
             </div>
           </form>
         </div>
@@ -298,12 +298,12 @@ export default function SponsorsPage() {
                         <strong>{s.name}</strong>
                       </div>
                     </td>
-                    <td>{s.contact_email}</td>
-                    <td style={{ fontWeight: 700, fontFamily: 'monospace' }}>{s.code_prefix}</td>
-                    <td>{s.discount_percentage}%</td>
-                    <td>{s.commission_percentage}%</td>
+                    <td>{s.contact_email || '—'}</td>
+                    <td style={{ fontWeight: 700, fontFamily: 'monospace' }}>{s.code_prefix || '—'}</td>
+                    <td>{s.discount_percentage ?? 0}%</td>
+                    <td>{s.commission_percentage ?? 0}%</td>
                     <td>
-                      {s.is_active ? (
+                      {s.status === 'active' || s.status === true || s.is_active === true ? (
                         <span className="badge badge-success">Active</span>
                       ) : (
                         <span className="badge badge-error">Inactive</span>
@@ -311,10 +311,10 @@ export default function SponsorsPage() {
                     </td>
                     <td>
                       <div style={styles.actions}>
-                        <button className="btn btn-outline btn-icon" onClick={() => handleEditClick(s)}>
+                        <button className="btn btn-outline btn-icon" onClick={() => handleEditClick(s)} title="Edit Sponsor">
                           <Edit2 size={14} />
                         </button>
-                        <button className="btn btn-outline btn-icon" onClick={() => handleDeleteSponsor(s.id)}>
+                        <button className="btn btn-outline btn-icon" onClick={() => handleDeleteSponsor(s.id)} title="Delete Sponsor">
                           <Trash2 size={14} style={{ color: 'var(--error)' }} />
                         </button>
                       </div>
@@ -350,12 +350,6 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     gap: '0.5rem',
     justifyContent: 'flex-end',
-  },
-  emptyText: {
-    fontSize: '0.875rem',
-    color: 'var(--text-secondary)',
-    textAlign: 'center',
-    padding: '3rem 0',
   },
   loadingContainer: {
     padding: '6rem 0',

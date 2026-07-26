@@ -10,6 +10,11 @@ export const PATCH = withAdminAuth(async (req: NextRequest, admin) => {
     }
 
     const body = await req.json();
+    const { discount_percentage, is_active, ...updateData } = body;
+
+    if (!updateData.status && is_active !== undefined) {
+      updateData.status = is_active ? 'active' : 'inactive';
+    }
 
     const { data: oldCode } = await supabaseAdmin
       .from('promo_codes')
@@ -19,9 +24,9 @@ export const PATCH = withAdminAuth(async (req: NextRequest, admin) => {
 
     const { data: promoCode, error } = await supabaseAdmin
       .from('promo_codes')
-      .update(body)
+      .update(updateData)
       .eq('id', codeId)
-      .select()
+      .select('*, sponsors(name, discount_percentage)')
       .single();
 
     if (error) throw error;

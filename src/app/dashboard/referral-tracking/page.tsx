@@ -10,6 +10,7 @@ interface SponsorSummary {
   name: string;
   code_prefix: string;
   commission_percentage: number;
+  status: string;
   totalReferrals: number;
   paidReferrals: number;
   unpaidReferrals: number;
@@ -18,6 +19,7 @@ interface SponsorSummary {
 export default function ReferralTrackingPage() {
   const [referrals, setReferrals] = useState<any[]>([]);
   const [sponsorSummary, setSponsorSummary] = useState<SponsorSummary[]>([]);
+  const [allSponsors, setAllSponsors] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -54,6 +56,7 @@ export default function ReferralTrackingPage() {
 
       setReferrals(data.referrals || []);
       setSponsorSummary(data.sponsorSummary || []);
+      setAllSponsors(data.allSponsors || data.sponsorSummary || []);
       setTotal(data.pagination?.total || 0);
       setTotalPages(data.pagination?.pages || 1);
     } catch (err) {
@@ -121,8 +124,8 @@ export default function ReferralTrackingPage() {
             <TrendingUp size={22} style={{ color: '#6366F1' }} />
           </div>
           <div>
-            <p style={styles.summaryLabel}>Active Sponsors</p>
-            <h3 style={styles.summaryValue}>{sponsorSummary.length}</h3>
+            <p style={styles.summaryLabel}>Total Sponsors</p>
+            <h3 style={styles.summaryValue}>{allSponsors.length}</h3>
           </div>
         </div>
       </div>
@@ -138,6 +141,7 @@ export default function ReferralTrackingPage() {
                   <th>Sponsor</th>
                   <th>Code Prefix</th>
                   <th>Commission %</th>
+                  <th>Status</th>
                   <th>Total Referrals</th>
                   <th>Paid</th>
                   <th>Unpaid</th>
@@ -147,8 +151,15 @@ export default function ReferralTrackingPage() {
                 {sponsorSummary.map(s => (
                   <tr key={s.id}>
                     <td><strong>{s.name}</strong></td>
-                    <td><code style={{ fontSize: '0.85rem' }}>{s.code_prefix}</code></td>
+                    <td><code style={{ fontSize: '0.85rem' }}>{s.code_prefix || '—'}</code></td>
                     <td>{s.commission_percentage}%</td>
+                    <td>
+                      {s.status === 'active' ? (
+                        <span className="badge badge-success">Active</span>
+                      ) : (
+                        <span className="badge badge-error">Inactive</span>
+                      )}
+                    </td>
                     <td>{s.totalReferrals}</td>
                     <td><span className="badge badge-success">{s.paidReferrals}</span></td>
                     <td><span className="badge badge-warning">{s.unpaidReferrals}</span></td>
@@ -166,8 +177,10 @@ export default function ReferralTrackingPage() {
           <label className="form-label">Sponsor</label>
           <select className="input-field" value={sponsorFilter} onChange={(e) => { setSponsorFilter(e.target.value); setPage(1); }}>
             <option value="">All Sponsors</option>
-            {sponsorSummary.map(s => (
-              <option key={s.id} value={s.id}>{s.name}</option>
+            {allSponsors.map(s => (
+              <option key={s.id} value={s.id}>
+                {s.name} {s.status ? `(${s.status})` : ''}
+              </option>
             ))}
           </select>
         </div>

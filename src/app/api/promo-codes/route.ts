@@ -6,7 +6,7 @@ export const GET = withAdminAuth(async (req: NextRequest) => {
   try {
     const { data: promoCodes, error } = await supabaseAdmin
       .from('promo_codes')
-      .select('*, sponsors(name)')
+      .select('*, sponsors(name, discount_percentage)')
       .order('created_at', { ascending: false });
 
     if (error) throw error;
@@ -21,11 +21,16 @@ export const GET = withAdminAuth(async (req: NextRequest) => {
 export const POST = withAdminAuth(async (req: NextRequest, admin) => {
   try {
     const body = await req.json();
+    const { discount_percentage, is_active, ...insertData } = body;
+
+    if (!insertData.status && is_active !== undefined) {
+      insertData.status = is_active ? 'active' : 'inactive';
+    }
 
     const { data: promoCode, error } = await supabaseAdmin
       .from('promo_codes')
-      .insert(body)
-      .select()
+      .insert(insertData)
+      .select('*, sponsors(name, discount_percentage)')
       .single();
 
     if (error) throw error;
