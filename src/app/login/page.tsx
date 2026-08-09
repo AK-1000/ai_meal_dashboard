@@ -290,7 +290,9 @@ const styles: Record<string, React.CSSProperties> = {
   inputField: {
     padding: '0.8rem 1rem',
     backgroundColor: 'rgba(15, 23, 42, 0.4)',
-    border: '1px solid rgba(255, 255, 255, 0.08)',
+    borderWidth: '1px',
+    borderStyle: 'solid',
+    borderColor: 'rgba(255, 255, 255, 0.08)',
     borderRadius: '12px',
     color: '#FFFFFF',
     fontSize: '0.95rem',

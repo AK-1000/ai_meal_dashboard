@@ -21,6 +21,9 @@ export const GET = withAdminAuth(async (req: NextRequest) => {
 export const POST = withAdminAuth(async (req: NextRequest, admin) => {
   try {
     const body = await req.json();
+    if (!body.type) {
+      body.type = 'partner';
+    }
 
     const { data: sponsor, error } = await supabaseAdmin
       .from('sponsors')
@@ -29,6 +32,23 @@ export const POST = withAdminAuth(async (req: NextRequest, admin) => {
       .single();
 
     if (error) throw error;
+
+    // Automatically create the permanent referral code for the sponsor
+    if (sponsor.code_prefix) {
+      const { error: promoError } = await supabaseAdmin
+        .from('promo_codes')
+        .insert({
+          code: sponsor.code_prefix,
+          sponsor_id: sponsor.id,
+          status: sponsor.status === 'active' ? 'active' : 'inactive',
+          free_days: sponsor.default_free_days || null,
+          expires_at: null
+        });
+        
+      if (promoError) {
+        console.error('Warning: Failed to auto-create promo code for sponsor', promoError);
+      }
+    }
 
     await logAdminAction(
       admin.id,

@@ -79,6 +79,9 @@ export const DELETE = withAdminAuth(async (req: NextRequest, admin) => {
     return NextResponse.json({ success: true });
   } catch (err: any) {
     console.error('Error deleting promo code:', err);
+    if (err.code === '23503') {
+      return NextResponse.json({ error: 'This promo code has already been used by users and cannot be deleted to preserve analytics. Please deactivate it instead.' }, { status: 409 });
+    }
     return NextResponse.json({ error: err.message || 'Failed to delete promo code' }, { status: 500 });
   }
 });

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Ticket, Plus, Trash2, Edit2, ShieldAlert, CheckSquare, Square } from 'lucide-react';
+import { Ticket, Plus, Trash2, Edit2, ShieldAlert, CheckSquare, Square, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { createClient } from '@/lib/supabase-browser';
 
@@ -17,9 +17,27 @@ export default function PromoCodesPage() {
   const [sponsorId, setSponsorId] = useState('');
   const [expiresAt, setExpiresAt] = useState('');
   const [isActive, setIsActive] = useState(true);
+  const [freeDays, setFreeDays] = useState<number | ''>('');
 
   // Selection state for bulk operations
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  // Search and Pagination states
+  const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  const limit = 10;
+
+  // Debounce search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchTerm);
+      setPage(1); // Reset to first page on new search
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -28,11 +46,13 @@ export default function PromoCodesPage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const codesRes = await fetch('/api/promo-codes', {
+      const codesRes = await fetch(`/api/promo-codes?page=${page}&limit=${limit}&search=${encodeURIComponent(debouncedSearch)}`, {
         headers: { 'Authorization': `Bearer ${session.access_token}` }
       });
       const codesData = await codesRes.json();
       setPromoCodes(codesData.promoCodes || []);
+      setTotalPages(codesData.pagination?.totalPages || 1);
+      setTotalItems(codesData.pagination?.total || 0);
 
       const sponsorsRes = await fetch('/api/sponsors', {
         headers: { 'Authorization': `Bearer ${session.access_token}` }
@@ -49,7 +69,7 @@ export default function PromoCodesPage() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [page, debouncedSearch]);
 
   const handleSavePromoCode = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,7 +82,8 @@ export default function PromoCodesPage() {
       code: code.toUpperCase().trim(),
       sponsor_id: sponsorId || null,
       expires_at: expiresAt ? new Date(expiresAt).toISOString() : null,
-      status: isActive ? 'active' : 'inactive'
+      status: isActive ? 'active' : 'inactive',
+      free_days: freeDays !== '' ? Number(freeDays) : null,
     };
 
     try {
@@ -111,6 +132,7 @@ export default function PromoCodesPage() {
     setSponsorId(item.sponsor_id || '');
     setExpiresAt(item.expires_at ? new Date(item.expires_at).toISOString().slice(0, 16) : '');
     setIsActive(item.status === 'active' || item.status === true || item.is_active === true);
+    setFreeDays(item.free_days || '');
     setShowAddForm(true);
   };
 
@@ -223,6 +245,7 @@ export default function PromoCodesPage() {
     setSponsorId('');
     setExpiresAt('');
     setIsActive(true);
+    setFreeDays('');
   };
 
   return (
@@ -233,6 +256,17 @@ export default function PromoCodesPage() {
           <p style={styles.subtitle}>Manage referral and discount codes for sponsors — edit, enable/disable, or bulk select</p>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem' }}>
+          <div style={{ position: 'relative' }}>
+            <Search size={18} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+            <input
+              type="text"
+              placeholder="Search codes..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="input-field"
+              style={{ paddingLeft: '36px', width: '250px' }}
+            />
+          </div>
           {!showAddForm && (
             <button className="btn btn-primary" onClick={() => { resetForm(); setShowAddForm(true); }}>
               <Plus size={16} />
@@ -304,6 +338,19 @@ export default function PromoCodesPage() {
               />
             </div>
 
+            <div className="form-group">
+              <label className="form-label" htmlFor="free-days">Custom Free Trial Days (Optional)</label>
+              <input
+                id="free-days"
+                type="number"
+                placeholder="e.g. 30"
+                value={freeDays}
+                onChange={(e) => setFreeDays(e.target.value === '' ? '' : Number(e.target.value))}
+                className="input-field"
+                min="1"
+              />
+            </div>
+
             <div className="form-group flex-center" style={{ flexDirection: 'row', justifyContent: 'flex-start', gap: '0.75rem', marginTop: '1.25rem' }}>
               <input
                 type="checkbox"
@@ -345,6 +392,7 @@ export default function PromoCodesPage() {
                 <th>Code</th>
                 <th>Sponsor</th>
                 <th>Discount</th>
+                <th>Free Trial</th>
                 <th>Expiration Date</th>
                 <th>Status</th>
                 <th style={{ textAlign: 'right' }}>Actions</th>
@@ -383,6 +431,7 @@ export default function PromoCodesPage() {
                       <td>
                         <strong>{discountVal ? `${discountVal}% OFF` : 'Standard'}</strong>
                       </td>
+                      <td>{item.free_days ? <strong>{item.free_days} Days</strong> : <span style={{ color: 'var(--text-muted)' }}>Default (14 Days)</span>}</td>
                       <td>{item.expires_at ? new Date(item.expires_at).toLocaleString() : <span style={{ color: 'var(--text-muted)' }}>Never Expires</span>}</td>
                       <td>
                         <button 
@@ -413,6 +462,33 @@ export default function PromoCodesPage() {
               )}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {!loading && promoCodes.length > 0 && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '1rem' }}>
+          <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+            Showing {promoCodes.length} of {totalItems} referral codes
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <button
+              className="btn btn-outline btn-icon"
+              disabled={page <= 1}
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <span style={{ fontSize: '0.9rem', fontWeight: 500, padding: '0 0.5rem' }}>
+              Page {page} of {totalPages}
+            </span>
+            <button
+              className="btn btn-outline btn-icon"
+              disabled={page >= totalPages}
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
         </div>
       )}
     </div>

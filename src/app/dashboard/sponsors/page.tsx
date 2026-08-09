@@ -18,6 +18,7 @@ export default function SponsorsPage() {
   const [commissionPercentage, setCommissionPercentage] = useState(5);
   const [codePrefix, setCodePrefix] = useState('');
   const [isActive, setIsActive] = useState(true);
+  const [defaultFreeDays, setDefaultFreeDays] = useState<number | ''>('');
 
   const fetchSponsors = async () => {
     setLoading(true);
@@ -63,7 +64,8 @@ export default function SponsorsPage() {
       discount_percentage: Number(discountPercentage),
       commission_percentage: Number(commissionPercentage),
       code_prefix: codePrefix.toUpperCase(),
-      status: isActive ? 'active' : 'inactive'
+      status: isActive ? 'active' : 'inactive',
+      default_free_days: defaultFreeDays !== '' ? Number(defaultFreeDays) : null,
     };
 
     try {
@@ -114,6 +116,7 @@ export default function SponsorsPage() {
     setCommissionPercentage(sponsor.commission_percentage ?? 5);
     setCodePrefix(sponsor.code_prefix || '');
     setIsActive(sponsor.status === 'active' || sponsor.status === true || sponsor.is_active === true);
+    setDefaultFreeDays(sponsor.default_free_days || '');
     setShowAddForm(true);
   };
 
@@ -153,6 +156,7 @@ export default function SponsorsPage() {
     setCommissionPercentage(5);
     setCodePrefix('');
     setIsActive(true);
+    setDefaultFreeDays('');
   };
 
   return (
@@ -243,6 +247,19 @@ export default function SponsorsPage() {
               />
             </div>
 
+            <div className="form-group">
+              <label className="form-label" htmlFor="default-free-days">Default Free Trial Days (Optional)</label>
+              <input
+                id="default-free-days"
+                type="number"
+                placeholder="e.g. 30"
+                value={defaultFreeDays}
+                onChange={(e) => setDefaultFreeDays(e.target.value === '' ? '' : Number(e.target.value))}
+                className="input-field"
+                min="1"
+              />
+            </div>
+
             <div className="form-group flex-center" style={{ flexDirection: 'row', justifyContent: 'flex-start', gap: '0.75rem', marginTop: '1.25rem' }}>
               <input
                 type="checkbox"
@@ -278,6 +295,7 @@ export default function SponsorsPage() {
                 <th>Code Prefix</th>
                 <th>Discount</th>
                 <th>Commission</th>
+                <th>Default Free Days</th>
                 <th>Status</th>
                 <th style={{ textAlign: 'right' }}>Actions</th>
               </tr>
@@ -302,6 +320,7 @@ export default function SponsorsPage() {
                     <td style={{ fontWeight: 700, fontFamily: 'monospace' }}>{s.code_prefix || '—'}</td>
                     <td>{s.discount_percentage ?? 0}%</td>
                     <td>{s.commission_percentage ?? 0}%</td>
+                    <td>{s.default_free_days ? <strong>{s.default_free_days} Days</strong> : <span style={{ color: 'var(--text-muted)' }}>14 Days</span>}</td>
                     <td>
                       {s.status === 'active' || s.status === true || s.is_active === true ? (
                         <span className="badge badge-success">Active</span>
