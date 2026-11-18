@@ -2,19 +2,44 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { Search, Eye, Trash2, Key, ChevronLeft, ChevronRight, UserPlus } from 'lucide-react';
+import { 
+  Search, 
+  Eye, 
+  Trash2, 
+  Key, 
+  ChevronLeft, 
+  ChevronRight, 
+  UserPlus,
+  Users,
+  Sparkles,
+  Clock,
+  TrendingUp,
+  AlertTriangle,
+  CreditCard,
+  CheckCircle2,
+  XCircle
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { createClient } from '@/lib/supabase-browser';
 
 export default function UsersPage() {
   const [users, setUsers] = useState<any[]>([]);
-  const [sponsors, setSponsors] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Search & Filter state
   const [search, setSearch] = useState('');
   const [tier, setTier] = useState('');
   const [status, setStatus] = useState('');
+  const [tab, setTab] = useState<'all' | 'trial' | 'converted' | 'cancelled_trial' | 'paid'>('all');
+
+  // Funnel analytics
+  const [funnelCounts, setFunnelCounts] = useState({
+    total: 0,
+    trial: 0,
+    converted: 0,
+    cancelled: 0,
+    paid: 0,
+  });
 
   // Pagination state
   const [page, setPage] = useState(1);
@@ -25,100 +50,6 @@ export default function UsersPage() {
   const [confirmDeleteEmail, setConfirmDeleteEmail] = useState('');
   const [resetPasswordId, setResetPasswordId] = useState<string | null>(null);
   const [newPassword, setNewPassword] = useState('');
-
-  // Add User State
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [addName, setAddName] = useState('');
-  const [addEmail, setAddEmail] = useState('');
-  const [addPassword, setAddPassword] = useState('aimeal@P@assword');
-  const [addPhone, setAddPhone] = useState('');
-  const [addSponsorId, setAddSponsorId] = useState('');
-  const [addPlanId, setAddPlanId] = useState('00000000-0000-0000-0000-000000000001');
-  const [addBillingCycle, setAddBillingCycle] = useState('monthly');
-  const [addPlanStartDate, setAddPlanStartDate] = useState(() => new Date().toISOString().split('T')[0]);
-  const [addPlanEndDate, setAddPlanEndDate] = useState('');
-  const [adding, setAdding] = useState(false);
-
-  const fetchSponsors = async () => {
-    try {
-      const supabase = createClient();
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-      const res = await fetch('/api/sponsors', {
-        headers: { 'Authorization': `Bearer ${session.access_token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setSponsors(data.sponsors || []);
-      }
-    } catch (err) {
-      console.error('Error fetching sponsors:', err);
-    }
-  };
-
-  useEffect(() => {
-    fetchSponsors();
-  }, []);
-
-  const handleAddUser = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!addEmail || !addPassword) {
-      toast.error('Email and password are required.');
-      return;
-    }
-    setAdding(true);
-    try {
-      const supabase = createClient();
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-
-      const res = await fetch('/api/users', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`
-        },
-        body: JSON.stringify({
-          name: addName,
-          email: addEmail,
-          password: addPassword,
-          phone: addPhone,
-          sponsorId: addSponsorId || null,
-          planId: addPlanId,
-          planStartDate: addPlanStartDate || null,
-          planEndDate: addPlanEndDate || null,
-          billingCycle: addPlanId !== '00000000-0000-0000-0000-000000000001' ? addBillingCycle : null
-        })
-      });
-
-      if (res.ok) {
-        toast.success(`User ${addEmail} created successfully.`);
-        resetAddForm();
-        setShowAddModal(false);
-        fetchUsers();
-      } else {
-        const err = await res.json();
-        toast.error(err.error || 'Failed to create user.');
-      }
-    } catch (err) {
-      console.error(err);
-      toast.error('Error creating user.');
-    } finally {
-      setAdding(false);
-    }
-  };
-
-  const resetAddForm = () => {
-    setAddName('');
-    setAddEmail('');
-    setAddPassword('aimeal@P@assword');
-    setAddPhone('');
-    setAddSponsorId('');
-    setAddPlanId('00000000-0000-0000-0000-000000000001');
-    setAddBillingCycle('monthly');
-    setAddPlanStartDate(new Date().toISOString().split('T')[0]);
-    setAddPlanEndDate('');
-  };
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
@@ -132,7 +63,8 @@ export default function UsersPage() {
         limit: '10',
         search,
         tier,
-        status
+        status,
+        tab
       });
 
       const res = await fetch(`/api/users?${queryParams}`, {
@@ -144,6 +76,9 @@ export default function UsersPage() {
       if (res.ok) {
         const data = await res.json();
         setUsers(data.users || []);
+        if (data.funnelCounts) {
+          setFunnelCounts(data.funnelCounts);
+        }
         setPagination(data.pagination || { page: 1, total: 0, pages: 1, limit: 10 });
       } else {
         toast.error('Failed to load users.');
@@ -154,7 +89,7 @@ export default function UsersPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, tier, status]);
+  }, [page, search, tier, status, tab]);
 
   useEffect(() => {
     fetchUsers();
@@ -164,6 +99,11 @@ export default function UsersPage() {
     e.preventDefault();
     setPage(1);
     fetchUsers();
+  };
+
+  const handleTabChange = (newTab: 'all' | 'trial' | 'converted' | 'cancelled_trial' | 'paid') => {
+    setTab(newTab);
+    setPage(1);
   };
 
   const handleDeleteUser = async () => {
@@ -232,16 +172,160 @@ export default function UsersPage() {
       {/* Header */}
       <div className="flex-between">
         <div>
-          <h1 className="title-large">Users Management</h1>
-          <p style={styles.subtitle}>View, manage, and monitor all platform accounts</p>
+          <h1 className="title-large">Users & Trial Tracking</h1>
+          <p style={styles.subtitle}>
+            Monitor all accounts, track active trials, conversions to paid plans, and churned trials.
+          </p>
         </div>
-        <button 
+        <Link 
+          href="/dashboard/users/create"
           className="btn btn-primary flex-center" 
           style={{ gap: '0.5rem' }}
-          onClick={() => { resetAddForm(); setShowAddModal(true); }}
         >
           <UserPlus size={16} />
           <span>Add New User</span>
+        </Link>
+      </div>
+
+      {/* Trial Funnel KPI Grid */}
+      <div style={styles.kpiGrid}>
+        {/* Total Users */}
+        <div 
+          onClick={() => handleTabChange('all')}
+          style={{
+            ...styles.kpiCard,
+            ...(tab === 'all' ? styles.kpiCardActive : {})
+          }}
+        >
+          <div style={styles.kpiHeader}>
+            <span style={styles.kpiTitle}>All Users</span>
+            <div style={{ ...styles.kpiIcon, backgroundColor: 'rgba(33, 150, 243, 0.1)', color: '#2196F3' }}>
+              <Users size={18} />
+            </div>
+          </div>
+          <div style={styles.kpiValue}>{funnelCounts.total}</div>
+          <div style={styles.kpiSub}>Total registered accounts</div>
+        </div>
+
+        {/* Active Pro Trials */}
+        <div 
+          onClick={() => handleTabChange('trial')}
+          style={{
+            ...styles.kpiCard,
+            ...(tab === 'trial' ? styles.kpiCardActive : {})
+          }}
+        >
+          <div style={styles.kpiHeader}>
+            <span style={styles.kpiTitle}>In Pro Trial</span>
+            <div style={{ ...styles.kpiIcon, backgroundColor: 'rgba(255, 152, 0, 0.1)', color: '#FF9800' }}>
+              <Clock size={18} />
+            </div>
+          </div>
+          <div style={{ ...styles.kpiValue, color: '#D97706' }}>{funnelCounts.trial}</div>
+          <div style={styles.kpiSub}>Currently evaluating Pro</div>
+        </div>
+
+        {/* Converted After Trial */}
+        <div 
+          onClick={() => handleTabChange('converted')}
+          style={{
+            ...styles.kpiCard,
+            ...(tab === 'converted' ? styles.kpiCardActive : {})
+          }}
+        >
+          <div style={styles.kpiHeader}>
+            <span style={styles.kpiTitle}>Converted After Trial</span>
+            <div style={{ ...styles.kpiIcon, backgroundColor: 'rgba(76, 175, 80, 0.1)', color: '#4CAF50' }}>
+              <TrendingUp size={18} />
+            </div>
+          </div>
+          <div style={{ ...styles.kpiValue, color: '#16A34A' }}>{funnelCounts.converted}</div>
+          <div style={styles.kpiSub}>Paid subscribers post-trial</div>
+        </div>
+
+        {/* Cancelled / Expired Trials */}
+        <div 
+          onClick={() => handleTabChange('cancelled_trial')}
+          style={{
+            ...styles.kpiCard,
+            ...(tab === 'cancelled_trial' ? styles.kpiCardActive : {})
+          }}
+        >
+          <div style={styles.kpiHeader}>
+            <span style={styles.kpiTitle}>Cancelled / Expired Trial</span>
+            <div style={{ ...styles.kpiIcon, backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#EF4444' }}>
+              <AlertTriangle size={18} />
+            </div>
+          </div>
+          <div style={{ ...styles.kpiValue, color: '#DC2626' }}>{funnelCounts.cancelled}</div>
+          <div style={styles.kpiSub}>Did not renew after trial</div>
+        </div>
+
+        {/* Active Paid Subscribers */}
+        <div 
+          onClick={() => handleTabChange('paid')}
+          style={{
+            ...styles.kpiCard,
+            ...(tab === 'paid' ? styles.kpiCardActive : {})
+          }}
+        >
+          <div style={styles.kpiHeader}>
+            <span style={styles.kpiTitle}>Paid Subscribers</span>
+            <div style={{ ...styles.kpiIcon, backgroundColor: 'rgba(16, 185, 129, 0.1)', color: '#10B981' }}>
+              <CreditCard size={18} />
+            </div>
+          </div>
+          <div style={{ ...styles.kpiValue, color: '#059669' }}>{funnelCounts.paid}</div>
+          <div style={styles.kpiSub}>Total active paying users</div>
+        </div>
+      </div>
+
+      {/* Funnel Navigation Tabs */}
+      <div style={styles.tabsContainer}>
+        <button
+          onClick={() => handleTabChange('all')}
+          style={{
+            ...styles.tabBtn,
+            ...(tab === 'all' ? styles.tabBtnActive : {})
+          }}
+        >
+          All Users ({funnelCounts.total})
+        </button>
+        <button
+          onClick={() => handleTabChange('trial')}
+          style={{
+            ...styles.tabBtn,
+            ...(tab === 'trial' ? styles.tabBtnActive : {})
+          }}
+        >
+          In Pro Trial ({funnelCounts.trial})
+        </button>
+        <button
+          onClick={() => handleTabChange('converted')}
+          style={{
+            ...styles.tabBtn,
+            ...(tab === 'converted' ? styles.tabBtnActive : {})
+          }}
+        >
+          Converted After Trial ({funnelCounts.converted})
+        </button>
+        <button
+          onClick={() => handleTabChange('cancelled_trial')}
+          style={{
+            ...styles.tabBtn,
+            ...(tab === 'cancelled_trial' ? styles.tabBtnActive : {})
+          }}
+        >
+          Cancelled / Expired Trials ({funnelCounts.cancelled})
+        </button>
+        <button
+          onClick={() => handleTabChange('paid')}
+          style={{
+            ...styles.tabBtn,
+            ...(tab === 'paid' ? styles.tabBtnActive : {})
+          }}
+        >
+          Paid Subscribers ({funnelCounts.paid})
         </button>
       </div>
 
@@ -270,8 +354,8 @@ export default function UsersPage() {
             style={styles.selectInput}
           >
             <option value="">All Tiers</option>
-            <option value="free">Free</option>
-            <option value="pro">Pro</option>
+            <option value="pro">Pro (Paid)</option>
+            <option value="pro_trial">Pro Trial</option>
             <option value="vip">VIP</option>
           </select>
 
@@ -283,6 +367,7 @@ export default function UsersPage() {
           >
             <option value="">All Statuses</option>
             <option value="active">Active</option>
+            <option value="trialing">In Trial</option>
             <option value="expired">Expired</option>
             <option value="canceled">Canceled</option>
           </select>
@@ -302,8 +387,9 @@ export default function UsersPage() {
               <tr>
                 <th>User Details</th>
                 <th>Tier</th>
-                <th>Status</th>
+                <th>Subscription & Trial Status</th>
                 <th>Verification</th>
+                <th>Sponsor / Partner</th>
                 <th>Registered Date</th>
                 <th style={{ textAlign: 'right' }}>Actions</th>
               </tr>
@@ -311,79 +397,128 @@ export default function UsersPage() {
             <tbody>
               {users.length === 0 ? (
                 <tr>
-                  <td colSpan={6} style={styles.emptyCell}>
-                    No users found. Try adjusting your filters.
+                  <td colSpan={7} style={styles.emptyCell}>
+                    No users found for this filter tab.
                   </td>
                 </tr>
               ) : (
-                users.map((u) => (
-                  <tr key={u.id}>
-                    <td>
-                      <div style={styles.userCell}>
-                        <div style={styles.avatar}>
-                          {u.avatar_url ? (
-                            <img src={u.avatar_url} alt={u.name || 'User'} style={styles.avatarImg} />
-                          ) : (
-                            <span>{(u.name?.[0] || u.email?.[0] || 'U').toUpperCase()}</span>
-                          )}
+                users.map((u) => {
+                  const isVip = u.subscription_tier?.toLowerCase() === 'vip';
+                  const isTrialActive = !isVip && (u.trial_status === 'active' || u.subscription_status === 'trialing') 
+                    && (!u.trial_ends_at || new Date(u.trial_ends_at).getTime() > Date.now());
+                  const isCancelledTrial = !isVip && u.subscription_status !== 'active';
+                  const isConverted = u.subscription_status === 'active' && u.trial_status === 'converted';
+                  
+                  let daysLeft = null;
+                  if (isTrialActive && u.trial_ends_at) {
+                    daysLeft = Math.max(0, Math.ceil((new Date(u.trial_ends_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+                  }
+
+                  return (
+                    <tr key={u.id}>
+                      <td>
+                        <div style={styles.userCell}>
+                          <div style={styles.avatar}>
+                            {u.avatar_url ? (
+                              <img src={u.avatar_url} alt={u.name || 'User'} style={styles.avatarImg} />
+                            ) : (
+                              <span>{(u.name?.[0] || u.email?.[0] || 'U').toUpperCase()}</span>
+                            )}
+                          </div>
+                          <div>
+                            <div style={styles.userName}>{u.name || 'Unnamed User'}</div>
+                            <div style={styles.userEmail}>{u.email}</div>
+                          </div>
                         </div>
-                        <div>
-                          <div style={styles.userName}>{u.name || 'Unnamed User'}</div>
-                          <div style={styles.userEmail}>{u.email}</div>
+                      </td>
+                      <td>
+                        {isVip ? (
+                          <span className="badge badge-primary">VIP</span>
+                        ) : (isTrialActive || isCancelledTrial) ? (
+                          <span className="badge" style={{ backgroundColor: '#FEF3C7', color: '#B45309', border: '1px solid #FDE68A', fontWeight: 600 }}>
+                            PRO TRIAL
+                          </span>
+                        ) : (
+                          <span className="badge badge-info">PRO</span>
+                        )}
+                      </td>
+                      <td>
+                        {isTrialActive ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <span className="badge" style={{ backgroundColor: '#FEF3C7', color: '#B45309', border: '1px solid #FDE68A' }}>
+                              Pro Trial ({daysLeft}d left)
+                            </span>
+                            {u.trial_ends_at && (
+                              <span style={{ fontSize: '0.6875rem', color: '#92400E' }}>
+                                Ends {new Date(u.trial_ends_at).toLocaleDateString()}
+                              </span>
+                            )}
+                          </div>
+                        ) : isConverted ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <span className="badge badge-success" style={{ gap: '4px' }}>
+                              <Sparkles size={12} />
+                              <span>Paid (Converted)</span>
+                            </span>
+                          </div>
+                        ) : isCancelledTrial ? (
+                          <span className="badge badge-error">
+                            Trial Expired / Cancelled
+                          </span>
+                        ) : (
+                          <span className={`badge ${
+                            u.subscription_status === 'active' ? 'badge-success' : 'badge-error'
+                          }`}>
+                            {u.subscription_status || 'expired'}
+                          </span>
+                        )}
+                      </td>
+                      <td>
+                        {u.email_verified ? (
+                          <span className="badge badge-success">Verified</span>
+                        ) : (
+                          <span className="badge badge-warning">Unverified</span>
+                        )}
+                      </td>
+                      <td>
+                        {u.sponsors ? (
+                          <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#D97706' }}>
+                            {u.sponsors.name} ({u.sponsors.code_prefix})
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: '0.8125rem', color: '#94A3B8' }}>Direct</span>
+                        )}
+                      </td>
+                      <td style={styles.dateCell}>
+                        {u.created_at ? new Date(u.created_at).toLocaleDateString() : 'N/A'}
+                      </td>
+                      <td>
+                        <div style={styles.actionButtons}>
+                          <Link href={`/dashboard/users/${u.id}`} className="btn btn-outline btn-icon" title="View Full Details">
+                            <Eye size={16} />
+                          </Link>
+                          <button
+                            className="btn btn-outline btn-icon"
+                            onClick={() => setResetPasswordId(u.id)}
+                            title="Reset Password"
+                          >
+                            <Key size={16} />
+                          </button>
+                          <button
+                            className="btn btn-outline btn-icon"
+                            onClick={() => {
+                              setConfirmDeleteId(u.id);
+                              setConfirmDeleteEmail(u.email);
+                            }}
+                            title="Delete User"
+                          >
+                            <Trash2 size={16} style={{ color: 'var(--error)' }} />
+                          </button>
                         </div>
-                      </div>
-                    </td>
-                    <td>
-                      <span className={`badge ${
-                        u.subscription_tier === 'vip' ? 'badge-primary' :
-                        u.subscription_tier === 'pro' ? 'badge-info' : 'badge-neutral'
-                      }`}>
-                        {(u.subscription_tier || 'free').toUpperCase()}
-                      </span>
-                    </td>
-                    <td>
-                      <span className={`badge ${
-                        u.subscription_status === 'active' ? 'badge-success' : 'badge-error'
-                      }`}>
-                        {u.subscription_status || 'free'}
-                      </span>
-                    </td>
-                    <td>
-                      {u.email_verified ? (
-                        <span className="badge badge-success">Verified</span>
-                      ) : (
-                        <span className="badge badge-warning">Unverified</span>
-                      )}
-                    </td>
-                    <td style={styles.dateCell}>
-                      {u.created_at ? new Date(u.created_at).toLocaleDateString() : 'N/A'}
-                    </td>
-                    <td>
-                      <div style={styles.actionButtons}>
-                        <Link href={`/dashboard/users/${u.id}`} className="btn btn-outline btn-icon" title="View Details">
-                          <Eye size={16} />
-                        </Link>
-                        <button
-                          className="btn btn-outline btn-icon"
-                          onClick={() => setResetPasswordId(u.id)}
-                          title="Reset Password"
-                        >
-                          <Key size={16} />
-                        </button>
-                        <button
-                          className="btn btn-outline btn-icon"
-                          onClick={() => {
-                            setConfirmDeleteId(u.id);
-                            setConfirmDeleteEmail(u.email);
-                          }}
-                          title="Delete User"
-                        >
-                          <Trash2 size={16} style={{ color: 'var(--error)' }} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -394,7 +529,7 @@ export default function UsersPage() {
       {!loading && pagination.pages > 1 && (
         <div style={styles.paginationContainer}>
           <div style={styles.paginationInfo}>
-            Showing page {pagination.page} of {pagination.pages} ({pagination.total} total users)
+            Showing page {pagination.page} of {pagination.pages} ({pagination.total} total filtered users)
           </div>
           <div style={styles.paginationButtons}>
             <button
@@ -419,15 +554,13 @@ export default function UsersPage() {
       {confirmDeleteId && (
         <div style={styles.modalBackdrop}>
           <div className="card animate-fade-in" style={styles.modalCard}>
-            <h3 className="title-medium" style={{ color: 'var(--error)' }}>Delete User</h3>
-            <p style={{ margin: '1rem 0', color: 'var(--text-secondary)' }}>
-              Are you sure you want to delete <strong>{confirmDeleteEmail}</strong>? This action cannot be undone.
+            <h3 className="title-medium" style={{ color: 'var(--error)', marginBottom: '0.75rem' }}>Delete User Account</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
+              Are you sure you want to completely delete <strong>{confirmDeleteEmail}</strong>? This will remove all their saved data, goals, nutrition logs, and subscription records.
             </p>
             <div style={styles.modalActions}>
               <button className="btn btn-outline" onClick={() => setConfirmDeleteId(null)}>Cancel</button>
-              <button className="btn btn-primary" style={{ backgroundColor: 'var(--error)' }} onClick={handleDeleteUser}>
-                Confirm Delete
-              </button>
+              <button className="btn btn-danger" onClick={handleDeleteUser}>Confirm Delete</button>
             </div>
           </div>
         </div>
@@ -437,14 +570,14 @@ export default function UsersPage() {
       {resetPasswordId && (
         <div style={styles.modalBackdrop}>
           <div className="card animate-fade-in" style={styles.modalCard}>
-            <h3 className="title-medium">Reset User Password</h3>
-            <form onSubmit={handleResetPassword} style={{ marginTop: '1rem' }}>
+            <h3 className="title-medium" style={{ marginBottom: '1rem' }}>Reset User Password</h3>
+            <form onSubmit={handleResetPassword}>
               <div className="form-group">
                 <label className="form-label" htmlFor="new-password">New Password</label>
                 <input
                   id="new-password"
                   type="password"
-                  placeholder="Minimum 6 characters"
+                  placeholder="Enter new password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   className="input-field"
@@ -454,154 +587,6 @@ export default function UsersPage() {
               <div style={styles.modalActions}>
                 <button type="button" className="btn btn-outline" onClick={() => setResetPasswordId(null)}>Cancel</button>
                 <button type="submit" className="btn btn-primary">Update Password</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Add User Modal */}
-      {showAddModal && (
-        <div style={styles.modalBackdrop}>
-          <div className="card animate-fade-in" style={{ ...styles.modalCard, maxWidth: '600px' }}>
-            <h3 className="title-medium" style={{ marginBottom: '1.5rem' }}>Add New User (Verified)</h3>
-            <form onSubmit={handleAddUser}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="add-name">Full Name</label>
-                  <input
-                    id="add-name"
-                    type="text"
-                    placeholder="John Doe"
-                    value={addName}
-                    onChange={(e) => setAddName(e.target.value)}
-                    className="input-field"
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="add-phone">Phone Number</label>
-                  <input
-                    id="add-phone"
-                    type="tel"
-                    placeholder="+96171XXXXXX"
-                    value={addPhone}
-                    onChange={(e) => setAddPhone(e.target.value)}
-                    className="input-field"
-                  />
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="add-email">Email Address</label>
-                  <input
-                    id="add-email"
-                    type="email"
-                    placeholder="john.doe@example.com"
-                    value={addEmail}
-                    onChange={(e) => setAddEmail(e.target.value)}
-                    className="input-field"
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="add-password">Password</label>
-                  <input
-                    id="add-password"
-                    type="password"
-                    placeholder="••••••"
-                    value={addPassword}
-                    onChange={(e) => setAddPassword(e.target.value)}
-                    className="input-field"
-                    required
-                  />
-                </div>
-              </div>
-
-              {/* Optional Sponsor Selection */}
-              <div className="form-group" style={{ marginBottom: '1rem' }}>
-                <label className="form-label" htmlFor="add-sponsor">Sponsor Partner (Optional)</label>
-                <select
-                  id="add-sponsor"
-                  value={addSponsorId}
-                  onChange={(e) => setAddSponsorId(e.target.value)}
-                  className="input-field"
-                  style={{ width: '100%' }}
-                >
-                  <option value="">No Sponsor / Independent User</option>
-                  {sponsors.map(s => (
-                    <option key={s.id} value={s.id}>{s.name} ({s.code_prefix || 'No prefix'})</option>
-                  ))}
-                </select>
-              </div>
-
-              <div style={{ borderTop: '1px solid #E2E8F0', margin: '1.5rem 0 1rem 0', paddingTop: '1rem' }}>
-                <h4 style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-dark)', marginBottom: '0.75rem' }}>Subscription Settings</h4>
-                
-                <div className="form-group" style={{ marginBottom: '1rem' }}>
-                  <label className="form-label" htmlFor="add-plan">Select Plan</label>
-                  <select
-                    id="add-plan"
-                    value={addPlanId}
-                    onChange={(e) => setAddPlanId(e.target.value)}
-                    className="input-field"
-                    style={{ width: '100%' }}
-                  >
-                    <option value="00000000-0000-0000-0000-000000000001">Free Plan (14-day Trial)</option>
-                    <option value="e203edfc-8109-4f44-af32-12b5723c1f15">Pro Plan</option>
-                    <option value="7080e55e-0002-494b-ada6-763d74325040">VIP Plan</option>
-                  </select>
-                </div>
-
-                {addPlanId !== '00000000-0000-0000-0000-000000000001' && (
-                  <>
-                    <div className="form-group" style={{ marginBottom: '1rem' }}>
-                      <label className="form-label" htmlFor="add-billing-cycle">Billing Cycle</label>
-                      <select
-                        id="add-billing-cycle"
-                        value={addBillingCycle}
-                        onChange={(e) => setAddBillingCycle(e.target.value)}
-                        className="input-field"
-                        style={{ width: '100%' }}
-                        required
-                      >
-                        <option value="monthly">Monthly</option>
-                        <option value="yearly">Yearly</option>
-                      </select>
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-                      <div className="form-group">
-                        <label className="form-label" htmlFor="add-start-date">Start Date</label>
-                        <input
-                          id="add-start-date"
-                          type="date"
-                          value={addPlanStartDate}
-                          onChange={(e) => setAddPlanStartDate(e.target.value)}
-                          className="input-field"
-                          required
-                        />
-                      </div>
-                      <div className="form-group">
-                        <label className="form-label" htmlFor="add-end-date">End Date</label>
-                        <input
-                          id="add-end-date"
-                          type="date"
-                          value={addPlanEndDate}
-                          onChange={(e) => setAddPlanEndDate(e.target.value)}
-                          className="input-field"
-                          required
-                        />
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.5rem' }}>
-                <button type="button" className="btn btn-outline" onClick={() => setShowAddModal(false)} disabled={adding}>Cancel</button>
-                <button type="submit" className="btn btn-primary" disabled={adding}>
-                  {adding ? 'Creating...' : 'Create User'}
-                </button>
               </div>
             </form>
           </div>
@@ -618,9 +603,82 @@ const styles: Record<string, React.CSSProperties> = {
     gap: '1.5rem',
   },
   subtitle: {
-    fontSize: '0.9rem',
-    color: 'var(--text-secondary)',
+    fontSize: '0.875rem',
+    color: '#64748B',
     marginTop: '0.25rem',
+  },
+  kpiGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(5, 1fr)',
+    gap: '1rem',
+  },
+  kpiCard: {
+    backgroundColor: '#FFFFFF',
+    border: '1px solid #E2E8F0',
+    borderRadius: '10px',
+    padding: '1rem',
+    cursor: 'pointer',
+    transition: 'all 0.15s ease',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+  },
+  kpiCardActive: {
+    border: '1px solid #4CAF50',
+    backgroundColor: '#F0FDF4',
+    boxShadow: '0 0 0 1px #4CAF50'
+  },
+  kpiHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '0.5rem'
+  },
+  kpiTitle: {
+    fontSize: '0.75rem',
+    fontWeight: 600,
+    color: '#64748B',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em'
+  },
+  kpiIcon: {
+    width: '32px',
+    height: '32px',
+    borderRadius: '8px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  kpiValue: {
+    fontSize: '1.5rem',
+    fontWeight: 700,
+    color: '#0F172A',
+    marginBottom: '0.25rem'
+  },
+  kpiSub: {
+    fontSize: '0.6875rem',
+    color: '#94A3B8'
+  },
+  tabsContainer: {
+    display: 'flex',
+    gap: '0.5rem',
+    borderBottom: '1px solid #E2E8F0',
+    paddingBottom: '0.5rem',
+    overflowX: 'auto'
+  },
+  tabBtn: {
+    padding: '0.5rem 1rem',
+    fontSize: '0.8125rem',
+    fontWeight: 600,
+    color: '#64748B',
+    backgroundColor: 'transparent',
+    border: 'none',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    transition: 'all 0.15s ease',
+    whiteSpace: 'nowrap'
+  },
+  tabBtnActive: {
+    backgroundColor: '#E2E8F0',
+    color: '#0F172A'
   },
   filterCard: {
     display: 'flex',

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { 
   ArrowLeft, 
@@ -14,7 +15,8 @@ import {
   Calendar, 
   TrendingUp, 
   Clock, 
-  Smartphone 
+  Smartphone,
+  Shield 
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { createClient } from '@/lib/supabase-browser';
@@ -150,7 +152,7 @@ export default function UserDetailPage() {
     );
   }
 
-  const { user, subscriptions, payments, healthLogs, appLogs } = userData;
+  const { user, subscriptions = [], payments = [], auditLogs = [], healthLogs = {}, appLogs = [] } = userData;
 
   const filteredCountries = countrySearch.trim() === ''
     ? COUNTRIES
@@ -159,20 +161,52 @@ export default function UserDetailPage() {
   return (
     <div style={styles.container}>
       {/* Back button & title */}
-      <div style={styles.header}>
-        <button className="btn btn-outline" style={{ padding: '0.5rem' }} onClick={() => router.push('/dashboard/users')}>
-          <ArrowLeft size={16} />
-        </button>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <h1 className="title-large">{user.name || 'Unnamed User'}</h1>
-            <span className={`badge ${
-              user.subscription_status === 'active' ? 'badge-success' : 'badge-error'
-            }`}>
-              {user.subscription_status || 'inactive'}
-            </span>
+      <div style={{ ...styles.header, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <button className="btn btn-outline" style={{ padding: '0.5rem' }} onClick={() => router.push('/dashboard/users')}>
+            <ArrowLeft size={16} />
+          </button>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <h1 className="title-large">{user.name || 'Unnamed User'}</h1>
+              <span className={`badge ${
+                user.subscription_status === 'active' ? 'badge-success' : 'badge-error'
+              }`}>
+                {user.subscription_status || 'inactive'}
+              </span>
+              {user.trial_status === 'active' && (
+                <span className="badge" style={{ backgroundColor: '#FEF3C7', color: '#B45309', border: '1px solid #FDE68A' }}>
+                  Pro Trial
+                </span>
+              )}
+            </div>
+            <p style={styles.subtitle}>{user.email} &bull; Joined {new Date(user.created_at).toLocaleDateString()}</p>
           </div>
-          <p style={styles.subtitle}>{user.email} &bull; Joined {new Date(user.created_at).toLocaleDateString()}</p>
+        </div>
+
+        <div style={{ display: 'flex', gap: '0.75rem' }}>
+          <button
+            onClick={() => {
+              const el = document.getElementById('edit-profile-section');
+              if (el) {
+                setActiveTab('profile');
+                el.scrollIntoView({ behavior: 'smooth' });
+              }
+            }}
+            className="btn btn-secondary"
+            style={{ gap: '0.375rem' }}
+          >
+            <User size={16} />
+            <span>Edit Profile</span>
+          </button>
+          <button
+            onClick={() => router.push(`/dashboard/users/${userId}/subscription`)}
+            className="btn btn-primary"
+            style={{ gap: '0.375rem' }}
+          >
+            <CreditCard size={16} />
+            <span>Manage Subscription & Trial</span>
+          </button>
         </div>
       </div>
 
@@ -200,6 +234,13 @@ export default function UserDetailPage() {
           <span>Payments</span>
         </button>
         <button 
+          style={{ ...styles.tab, ...(activeTab === 'audit' ? styles.tabActive : {}) }}
+          onClick={() => setActiveTab('audit')}
+        >
+          <Shield size={16} />
+          <span>Audit Logs ({auditLogs.length})</span>
+        </button>
+        <button 
           style={{ ...styles.tab, ...(activeTab === 'health' ? styles.tabActive : {}) }}
           onClick={() => setActiveTab('health')}
         >
@@ -219,7 +260,7 @@ export default function UserDetailPage() {
       <div style={styles.tabPanel}>
         {/* Profile Panel */}
         {activeTab === 'profile' && (
-          <div className="card animate-fade-in" style={styles.profileCard}>
+          <div id="edit-profile-section" className="card animate-fade-in" style={styles.profileCard}>
             <h3 className="title-medium" style={{ marginBottom: '1.5rem' }}>Edit Basic Information</h3>
             <form onSubmit={handleUpdateProfile} style={styles.formGrid}>
               <div className="form-group">
@@ -372,7 +413,50 @@ export default function UserDetailPage() {
         {activeTab === 'subscription' && (
           <div className="animate-fade-in" style={styles.subContainer}>
             <div className="card" style={{ marginBottom: '1.5rem' }}>
-              <h3 className="title-medium" style={{ marginBottom: '1rem' }}>Current Tier: {user.subscription_tier || 'Free'}</h3>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+                <div>
+                  {(() => {
+                    const isVip = user.subscription_tier?.toLowerCase() === 'vip';
+                    const isTrialActive = !isVip && (user.trial_status === 'active' || user.subscription_status === 'trialing') 
+                      && (!user.trial_ends_at || new Date(user.trial_ends_at).getTime() > Date.now());
+                    const isTrialExpired = !isVip && user.subscription_status !== 'active';
+                    const isUserTrial = isTrialActive || isTrialExpired;
+
+                    return (
+                      <>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+                          <h3 className="title-medium" style={{ margin: 0 }}>Current Tier:</h3>
+                          {isVip ? (
+                            <span className="badge badge-primary">VIP</span>
+                          ) : isUserTrial ? (
+                            <span className="badge" style={{ backgroundColor: '#FEF3C7', color: '#B45309', border: '1px solid #FDE68A', fontWeight: 600 }}>
+                              PRO TRIAL
+                            </span>
+                          ) : (
+                            <span className="badge badge-info">PRO</span>
+                          )}
+                        </div>
+                        <p style={{ fontSize: '0.8125rem', color: '#64748B', marginTop: '4px' }}>
+                          {isUserTrial && user.trial_status === 'active' 
+                            ? 'User is actively evaluating Pro via Trial' 
+                            : isUserTrial && user.trial_status === 'expired'
+                            ? 'User was on a Pro Plan Trial (Expired)'
+                            : 'Active tier and billing cycle'}
+                        </p>
+                      </>
+                    );
+                  })()}
+                </div>
+                <Link
+                  href={`/dashboard/users/${userId}/subscription`}
+                  className="btn btn-primary"
+                  style={{ gap: '0.5rem' }}
+                >
+                  <CreditCard size={16} />
+                  <span>Open Subscription & Trial Manager →</span>
+                </Link>
+              </div>
+
               <div style={styles.infoGrid}>
                 <div style={styles.infoItem}>
                   <span style={styles.infoLabel}>Status</span>
@@ -389,7 +473,7 @@ export default function UserDetailPage() {
                 <div style={styles.infoItem}>
                   <span style={styles.infoLabel}>Device Platform</span>
                   <span style={{ ...styles.infoVal, textTransform: 'capitalize' }}>
-                    {user.device_platform || 'web'}
+                    {user.device_platform ? user.device_platform.toUpperCase() : 'Web / Admin Granted'}
                   </span>
                 </div>
                 <div style={styles.infoItem}>
@@ -414,7 +498,7 @@ export default function UserDetailPage() {
                         <th>End Date</th>
                         <th>Status</th>
                         <th>Cycle</th>
-                        <th>Platform</th>
+                        <th>Platform / Provider</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -428,7 +512,7 @@ export default function UserDetailPage() {
                             </span>
                           </td>
                           <td style={{ textTransform: 'capitalize' }}>{sub.billing_cycle || 'monthly'}</td>
-                          <td style={{ textTransform: 'capitalize' }}>{sub.platform || 'manual'}</td>
+                          <td style={{ textTransform: 'capitalize' }}>{sub.billing_provider || sub.platform || 'admin'}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -444,14 +528,23 @@ export default function UserDetailPage() {
           <div className="card animate-fade-in">
             <h3 className="title-medium" style={{ marginBottom: '1.5rem' }}>Payment Transactions</h3>
             {payments.length === 0 ? (
-              <p style={styles.emptyText}>No transaction records found.</p>
+              <div style={{ padding: '2.5rem 1.5rem', textAlign: 'center', backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px dashed #CBD5E1' }}>
+                <p style={{ ...styles.emptyText, fontWeight: 600, color: '#475569', marginBottom: '0.5rem' }}>
+                  No external payment gateway transactions found.
+                </p>
+                {user.subscription_status === 'active' && (
+                  <p style={{ fontSize: '0.875rem', color: '#64748B', maxWidth: '540px', margin: '0 auto', lineHeight: 1.5 }}>
+                    This user holds an active <strong>{user.subscription_tier?.toUpperCase()}</strong> subscription granted directly by an Administrator (Manual / Complimentary Access). To view which admin authorized or modified this account, open the <strong>Audit Logs</strong> tab above.
+                  </p>
+                )}
+              </div>
             ) : (
               <div className="table-container">
                 <table className="admin-table">
                   <thead>
                     <tr>
                       <th>Date</th>
-                      <th>Transaction ID</th>
+                      <th>Transaction ID / Reference</th>
                       <th>Amount</th>
                       <th>Status</th>
                       <th>Platform</th>
@@ -467,13 +560,75 @@ export default function UserDetailPage() {
                         <td><strong>${Number(p.amount).toFixed(2)}</strong> {p.currency}</td>
                         <td>
                           <span className={`badge ${
-                            p.status === 'success' ? 'badge-success' : 
+                            p.status === 'success' || p.status === 'succeeded' ? 'badge-success' : 
                             p.status === 'refunded' ? 'badge-warning' : 'badge-error'
                           }`}>
                             {p.status}
                           </span>
                         </td>
-                        <td style={{ textTransform: 'capitalize' }}>{p.platform || 'areeba'}</td>
+                        <td style={{ textTransform: 'capitalize' }}>
+                          {p.platform === 'google_play' ? 'Google Play IAP' : 
+                           p.platform === 'ios' ? 'iOS StoreKit' : (p.platform || 'direct')}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Audit Logs Panel */}
+        {activeTab === 'audit' && (
+          <div className="card animate-fade-in">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <div>
+                <h3 className="title-medium">Administrative Audit Trail</h3>
+                <p style={{ fontSize: '0.8125rem', color: '#64748B', marginTop: '2px' }}>
+                  Track admin provisioning, tier modifications, and promotional access grants for this account.
+                </p>
+              </div>
+              <span className="badge badge-info">{auditLogs.length} Events</span>
+            </div>
+
+            {auditLogs.length === 0 ? (
+              <div style={{ padding: '2rem 1rem', textAlign: 'center', backgroundColor: '#F8FAFC', borderRadius: '8px', border: '1px dashed #CBD5E1' }}>
+                <p style={styles.emptyText}>No admin audit events recorded for this user account.</p>
+              </div>
+            ) : (
+              <div className="table-container">
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Timestamp</th>
+                      <th>Action</th>
+                      <th>Details & Notes</th>
+                      <th>Client / IP</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {auditLogs.map((log: any) => (
+                      <tr key={log.id}>
+                        <td style={{ whiteSpace: 'nowrap', fontSize: '0.8125rem' }}>
+                          {new Date(log.created_at).toLocaleString()}
+                        </td>
+                        <td>
+                          <span className="badge badge-primary" style={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>
+                            {log.action}
+                          </span>
+                        </td>
+                        <td style={{ maxWidth: '420px' }}>
+                          <pre style={{ margin: 0, fontSize: '0.75rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word', backgroundColor: '#F8FAFC', padding: '6px 8px', borderRadius: '4px' }}>
+                            {JSON.stringify(log.details, null, 2)}
+                          </pre>
+                        </td>
+                        <td style={{ fontSize: '0.75rem', color: '#64748B' }}>
+                          <div>{log.ip_address || 'Local/Internal'}</div>
+                          <div style={{ fontSize: '0.6875rem', color: '#94A3B8' }}>
+                            {log.user_agent ? (log.user_agent.length > 25 ? log.user_agent.slice(0, 25) + '...' : log.user_agent) : ''}
+                          </div>
+                        </td>
                       </tr>
                     ))}
                   </tbody>

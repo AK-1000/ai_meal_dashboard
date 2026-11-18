@@ -27,14 +27,62 @@ export const GET = withAdminAuth(async (req: NextRequest, admin) => {
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
 
-    // 3. Fetch user's payment history
+    // 3. Fetch user's payments (unified payment_history + store_purchases)
     const { data: payments } = await supabaseAdmin
       .from('payment_history')
       .select('*')
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
 
-    // 4. Fetch logs for this user
+    const { data: storePurchases } = await supabaseAdmin
+      .from('store_purchases')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    const PRODUCT_PRICES: Record<string, number> = {
+      'com.aimeal.pro': 10.99,
+      'com.aimeal.vip': 14.99,
+      'com.aimeal.pro.monthly': 10.99,
+      'com.aimeal.pro.yearly': 89.99,
+      'com.aimeal.vip.monthly': 14.99,
+      'com.aimeal.vip.yearly': 125.91,
+    };
+
+    const normalizedPh = (payments || []).map((p: any) => ({
+      id: p.id,
+      amount: Number(p.amount) || 0,
+      currency: p.currency || 'USD',
+      status: p.status || 'success',
+      platform: p.platform || 'ios',
+      created_at: p.created_at,
+      areeba_transaction_id: p.areeba_transaction_id || p.areeba_order_id,
+      apple_transaction_id: p.apple_transaction_id,
+    }));
+
+    const normalizedSp = (storePurchases || []).map((s: any) => ({
+      id: s.id,
+      amount: PRODUCT_PRICES[s.product_id] || 10.99,
+      currency: 'USD',
+      status: (String(s.purchase_state) === '0' || s.purchase_state === 'expired') ? 'success' : 'completed',
+      platform: 'google_play',
+      created_at: s.created_at,
+      areeba_transaction_id: null,
+      apple_transaction_id: s.order_id || s.purchase_token,
+    }));
+
+    const combinedPayments = [...normalizedPh, ...normalizedSp].sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+
+    // 4. Fetch admin audit logs for this user
+    const { data: auditLogs } = await supabaseAdmin
+      .from('admin_audit_log')
+      .select('*')
+      .eq('entity_id', userId)
+      .order('created_at', { ascending: false });
+
+    // 5. Fetch logs for this user
     const { data: appLogs } = await supabaseAdmin
       .from('app_logs')
       .select('*')
@@ -42,7 +90,7 @@ export const GET = withAdminAuth(async (req: NextRequest, admin) => {
       .order('created_at', { ascending: false })
       .limit(50);
 
-    // 5. Fetch user daily progress (water, weight logs)
+    // 6. Fetch user daily progress (water, weight logs)
     const { data: waterLogs } = await supabaseAdmin
       .from('water_logs')
       .select('*')
@@ -60,7 +108,8 @@ export const GET = withAdminAuth(async (req: NextRequest, admin) => {
     return NextResponse.json({
       user,
       subscriptions: subscriptions || [],
-      payments: payments || [],
+      payments: combinedPayments,
+      auditLogs: auditLogs || [],
       appLogs: appLogs || [],
       healthLogs: {
         waterLogs: waterLogs || [],
@@ -97,6 +146,31 @@ export const PATCH = withAdminAuth(async (req: NextRequest, admin) => {
       .single();
 
     if (error) throw error;
+
+    // Keep user_subscriptions in sync if subscription details were modified
+    if (body.subscription_tier || body.subscription_status || body.plan_end_date) {
+      const PRO_PLAN_ID = 'e203edfc-8109-4f44-af32-12b5723c1f15';
+      const VIP_PLAN_ID = '7080e55e-0002-494b-ada6-763d74325040';
+      const targetPlanId = body.subscription_tier === 'vip' ? VIP_PLAN_ID : PRO_PLAN_ID;
+      
+      const subUpdate: any = {
+        plan_id: targetPlanId,
+        status: body.subscription_status || 'active',
+        billing_provider: 'admin',
+        billing_mode: 'complimentary',
+        updated_at: new Date().toISOString()
+      };
+      if (body.plan_end_date) {
+        subUpdate.current_period_end = new Date(body.plan_end_date).toISOString();
+      }
+
+      if (newUser.current_subscription_id) {
+        await supabaseAdmin
+          .from('user_subscriptions')
+          .update(subUpdate)
+          .eq('id', newUser.current_subscription_id);
+      }
+    }
 
     // Log the admin action
     await logAdminAction(

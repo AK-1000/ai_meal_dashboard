@@ -30,6 +30,12 @@ import {
 import { toast } from 'sonner';
 
 const COLORS = ['#4CAF50', '#26A69A', '#FF9800', '#2196F3', '#F44336'];
+const TIER_COLORS: Record<string, string> = {
+  'Pro Trial': '#F59E0B',
+  'Pro (Paid)': '#3B82F6',
+  'Pro': '#3B82F6',
+  'VIP': '#8B5CF6',
+};
 
 export default function OverviewPage() {
   const { admin } = useAuth();
@@ -209,7 +215,7 @@ export default function OverviewPage() {
                     dataKey="value"
                   >
                     {charts.tierSplit.map((entry: any, index: number) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[(index + 2) % COLORS.length]} />
+                      <Cell key={`cell-${index}`} fill={TIER_COLORS[entry.name] || COLORS[(index + 2) % COLORS.length]} />
                     ))}
                   </Pie>
                   <Tooltip />
@@ -236,25 +242,36 @@ export default function OverviewPage() {
             {recentActivity.users.length === 0 ? (
               <p style={styles.emptyText}>No users registered recently.</p>
             ) : (
-              recentActivity.users.map((u: any) => (
-                <div key={u.id} style={styles.activityItem}>
-                  <div style={styles.avatarPlaceholder}>
-                    {u.name ? u.name[0].toUpperCase() : u.email[0].toUpperCase()}
+              recentActivity.users.map((u: any) => {
+                const isVip = u.subscription_tier?.toLowerCase() === 'vip';
+                const isTrialActive = !isVip && (u.trial_status === 'active' || u.subscription_status === 'trialing') 
+                  && (!u.trial_ends_at || new Date(u.trial_ends_at).getTime() > Date.now());
+                const isTrialExpired = !isVip && u.subscription_status !== 'active';
+                const isTrial = isTrialActive || isTrialExpired;
+
+                return (
+                  <div key={u.id} style={styles.activityItem}>
+                    <div style={styles.avatarPlaceholder}>
+                      {u.name ? u.name[0].toUpperCase() : u.email[0].toUpperCase()}
+                    </div>
+                    <div style={styles.itemInfo}>
+                      <span style={styles.itemName}>{u.name || 'Unnamed User'}</span>
+                      <span style={styles.itemMeta}>{u.email}</span>
+                    </div>
+                    <div style={styles.itemAction}>
+                      {isVip ? (
+                        <span className="badge badge-primary">VIP</span>
+                      ) : isTrial ? (
+                        <span className="badge" style={{ backgroundColor: '#FEF3C7', color: '#B45309', border: '1px solid #FDE68A', fontWeight: 600 }}>
+                          PRO TRIAL
+                        </span>
+                      ) : (
+                        <span className="badge badge-info">PRO</span>
+                      )}
+                    </div>
                   </div>
-                  <div style={styles.itemInfo}>
-                    <span style={styles.itemName}>{u.name || 'Unnamed User'}</span>
-                    <span style={styles.itemMeta}>{u.email}</span>
-                  </div>
-                  <div style={styles.itemAction}>
-                    <span className={`badge ${
-                      u.subscription_tier?.toLowerCase() === 'vip' ? 'badge-error' : 
-                      u.subscription_tier?.toLowerCase() === 'pro' ? 'badge-success' : 'badge-info'
-                    }`}>
-                      {u.subscription_tier || 'Free'}
-                    </span>
-                  </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>

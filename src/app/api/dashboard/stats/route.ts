@@ -3,6 +3,49 @@ import { withAdminAuth } from '@/lib/auth-helpers';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { startOfMonth, subDays, format } from 'date-fns';
 
+const isSandboxEmail = (email?: string | null) => {
+  if (!email) return false;
+  const e = email.toLowerCase().trim();
+  return (
+    e.includes('mindmatrix') ||
+    e.includes('hero12') ||
+    e.includes('71630545') ||
+    e.includes('kassabb1996') || // ali.kassabb1996@gmail.com
+    e.includes('kassab.ai') ||
+    e.includes('elkhatib.work') ||
+    e.includes('ttest.com') ||
+    e.includes('testt.com') ||
+    e.includes('@test.') ||
+    e.includes('cloudtestlabaccounts') ||
+    e.includes('aimeal.internal') ||
+    e === 'trt@trt.com' ||
+    e.startsWith('test')
+  );
+};
+
+const PRODUCT_PRICES: Record<string, number> = {
+  'com.aimeal.pro': 10.99,
+  'com.aimeal.vip': 14.99,
+  'com.aimeal.pro.monthly': 10.99,
+  'com.aimeal.pro.yearly': 89.99,
+  'com.aimeal.vip.monthly': 14.99,
+  'com.aimeal.vip.yearly': 125.91,
+};
+
+const getAndroidPrice = (productId?: string | null, basePlanId?: string | null) => {
+  if (basePlanId) {
+    const b = basePlanId.toLowerCase();
+    if (b.includes('vip') && (b.includes('year') || b.includes('annual'))) return 125.91;
+    if (b.includes('vip')) return 14.99;
+    if (b.includes('pro') && (b.includes('year') || b.includes('annual'))) return 89.99;
+    if (b.includes('pro')) return 10.99;
+  }
+  if (productId && PRODUCT_PRICES[productId]) {
+    return PRODUCT_PRICES[productId];
+  }
+  return 10.99;
+};
+
 export const GET = withAdminAuth(async (req: NextRequest) => {
   try {
     // 1. Total users count
@@ -20,16 +63,40 @@ export const GET = withAdminAuth(async (req: NextRequest) => {
 
     if (subsErr) throw subsErr;
 
-    // 3. Current month revenue (sum of payments where status = 'success' in current month)
+    // 3. Current month revenue (sum of production payments in current month)
     const firstOfCurrentMonth = startOfMonth(new Date()).toISOString();
-    const { data: currentMonthPayments, error: paymentsErr } = await supabaseAdmin
+    
+    // 3a. payment_history (iOS & Areeba Gateway)
+    const { data: currentMonthPayments } = await supabaseAdmin
       .from('payment_history')
-      .select('amount')
+      .select('amount, status, areeba_transaction_id, users (email)')
       .eq('status', 'success')
       .gte('created_at', firstOfCurrentMonth);
 
-    if (paymentsErr) throw paymentsErr;
-    const currentMonthRevenue = currentMonthPayments?.reduce((sum, p) => sum + Number(p.amount), 0) || 0;
+    let currentMonthRevenue = 0;
+    (currentMonthPayments || []).forEach((p: any) => {
+      const email = p.users?.email || '';
+      const isTest = isSandboxEmail(email) || p.areeba_transaction_id === '1';
+      if (!isTest) {
+        currentMonthRevenue += Number(p.amount) || 0;
+      }
+    });
+
+    // 3b. store_purchases (Google Play Android IAP)
+    const { data: currentMonthStorePurchases } = await supabaseAdmin
+      .from('store_purchases')
+      .select('product_id, base_plan_id, purchase_state, users (email)')
+      .gte('created_at', firstOfCurrentMonth);
+
+    (currentMonthStorePurchases || []).forEach((s: any) => {
+      const email = s.users?.email || '';
+      const state = String(s.purchase_state || '').toLowerCase();
+      // 0 = purchased / active / expired
+      const isSuccess = state === '0' || state === 'purchased' || state === 'expired' || state === 'active';
+      if (isSuccess && !isSandboxEmail(email)) {
+        currentMonthRevenue += getAndroidPrice(s.product_id, s.base_plan_id);
+      }
+    });
 
     // 4. Platform Split (from users table device_platform)
     const { data: platformData, error: platformErr } = await supabaseAdmin
@@ -52,24 +119,38 @@ export const GET = withAdminAuth(async (req: NextRequest) => {
       { name: 'Other', value: platformCounts.other },
     ];
 
-    // 5. Subscription Tier Split
+    // 5. Subscription Tier Split (Pro Trial vs Normal Pro vs VIP)
     const { data: tierData, error: tierErr } = await supabaseAdmin
       .from('users')
-      .select('subscription_tier');
+      .select('subscription_tier, subscription_status, trial_status');
 
     if (tierErr) throw tierErr;
 
-    const tierCounts: Record<string, number> = { free: 0, pro: 0, vip: 0 };
+    const tierCounts = { proTrial: 0, proPaid: 0, vip: 0 };
     tierData?.forEach(u => {
-      const tier = (u.subscription_tier || 'free').toLowerCase();
-      if (tier.includes('vip')) tierCounts.vip++;
-      else if (tier.includes('pro')) tierCounts.pro++;
-      else tierCounts.free++;
+      const tier = (u.subscription_tier || 'pro').toLowerCase();
+      if (tier.includes('vip')) {
+        tierCounts.vip++;
+      } else {
+        const isTrial = 
+          u.trial_status === 'active' || 
+          u.trial_status === 'expired' || 
+          u.subscription_status === 'trialing' || 
+          (u.subscription_status === 'expired' && u.trial_status !== 'converted');
+        
+        if (isTrial && u.subscription_status !== 'active') {
+          tierCounts.proTrial++;
+        } else if (u.subscription_status === 'active' && u.trial_status === 'active') {
+          tierCounts.proTrial++;
+        } else {
+          tierCounts.proPaid++;
+        }
+      }
     });
 
     const tierSplit = [
-      { name: 'Free', value: tierCounts.free },
-      { name: 'Pro', value: tierCounts.pro },
+      { name: 'Pro Trial', value: tierCounts.proTrial },
+      { name: 'Pro (Paid)', value: tierCounts.proPaid },
       { name: 'VIP', value: tierCounts.vip },
     ];
 
@@ -85,7 +166,6 @@ export const GET = withAdminAuth(async (req: NextRequest) => {
 
     // Aggregate signups by day
     const signupTrendMap = new Map<string, number>();
-    // Pre-populate last 30 days
     for (let i = 29; i >= 0; i--) {
       const dateStr = format(subDays(new Date(), i), 'yyyy-MM-dd');
       signupTrendMap.set(dateStr, 0);
@@ -108,16 +188,46 @@ export const GET = withAdminAuth(async (req: NextRequest) => {
     // 7. Recent signups
     const { data: latestUsers } = await supabaseAdmin
       .from('users')
-      .select('id, email, name, subscription_tier, created_at')
+      .select('id, email, name, subscription_tier, subscription_status, trial_status, created_at')
       .order('created_at', { ascending: false })
       .limit(5);
 
-    // 8. Recent payments (using join)
-    const { data: latestPayments } = await supabaseAdmin
+    // 8. Recent payments (unified payment_history + store_purchases)
+    const { data: phRecent } = await supabaseAdmin
       .from('payment_history')
       .select('id, amount, currency, status, platform, created_at, users (email)')
       .order('created_at', { ascending: false })
       .limit(5);
+
+    const { data: spRecent } = await supabaseAdmin
+      .from('store_purchases')
+      .select('id, product_id, base_plan_id, purchase_state, created_at, users (email)')
+      .order('created_at', { ascending: false })
+      .limit(5);
+
+    const normalizedPhRecent = (phRecent || []).map((p: any) => ({
+      id: p.id,
+      amount: Number(p.amount) || 0,
+      currency: p.currency || 'USD',
+      status: p.status || 'success',
+      platform: p.platform || 'ios',
+      created_at: p.created_at,
+      users: p.users,
+    }));
+
+    const normalizedSpRecent = (spRecent || []).map((s: any) => ({
+      id: s.id,
+      amount: getAndroidPrice(s.product_id, s.base_plan_id),
+      currency: 'USD',
+      status: (String(s.purchase_state) === '0' || s.purchase_state === 'expired') ? 'success' : 'completed',
+      platform: 'google_play',
+      created_at: s.created_at,
+      users: s.users,
+    }));
+
+    const combinedRecentPayments = [...normalizedPhRecent, ...normalizedSpRecent]
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .slice(0, 5);
 
     return NextResponse.json({
       stats: {
@@ -132,7 +242,7 @@ export const GET = withAdminAuth(async (req: NextRequest) => {
       },
       recentActivity: {
         users: latestUsers || [],
-        payments: latestPayments || []
+        payments: combinedRecentPayments
       }
     });
   } catch (err: any) {

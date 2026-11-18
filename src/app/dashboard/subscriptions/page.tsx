@@ -1,17 +1,61 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import { Award, Plus, Trash2, Edit2, Check, X, ToggleLeft, ToggleRight } from 'lucide-react';
+import React, { useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
+import { 
+  CreditCard, 
+  DollarSign, 
+  Clock, 
+  TrendingUp, 
+  AlertTriangle, 
+  Search, 
+  Plus, 
+  Edit2, 
+  Trash2, 
+  Check, 
+  X, 
+  ToggleLeft, 
+  ToggleRight, 
+  Sparkles, 
+  Users,
+  ChevronLeft,
+  ChevronRight,
+  ExternalLink,
+  Settings
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { createClient } from '@/lib/supabase-browser';
 
 export default function SubscriptionsPage() {
+  const [activeTab, setActiveTab] = useState<'tracking' | 'plans'>('tracking');
+
+  // Tracking state
+  const [subscriptions, setSubscriptions] = useState<any[]>([]);
+  const [stats, setStats] = useState({
+    total: 0,
+    activePaid: 0,
+    activePaidPro: 0,
+    activePaidVip: 0,
+    activeTrials: 0,
+    canceled: 0,
+    estimatedMrr: 0
+  });
+  const [trackingLoading, setTrackingLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [planFilter, setPlanFilter] = useState('');
+  const [cycleFilter, setCycleFilter] = useState('');
+  const [platformFilter, setPlatformFilter] = useState('');
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({ page: 1, total: 0, pages: 1, limit: 10 });
+
+  // Plans Management state
   const [plans, setPlans] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [plansLoading, setPlansLoading] = useState(true);
   const [editingPlan, setEditingPlan] = useState<any | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
 
-  // Form states
+  // Form states for Plan
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [priceMonthly, setPriceMonthly] = useState(0);
@@ -23,17 +67,54 @@ export default function SubscriptionsPage() {
   const [appleMonthly, setAppleMonthly] = useState('');
   const [appleYearly, setAppleYearly] = useState('');
 
+  // 1. Fetch User Subscriptions
+  const fetchSubscriptions = useCallback(async () => {
+    setTrackingLoading(true);
+    try {
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: '10',
+        search,
+        status: statusFilter,
+        plan: planFilter,
+        cycle: cycleFilter,
+        platform: platformFilter
+      });
+
+      const res = await fetch(`/api/subscriptions?${params}`, {
+        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setSubscriptions(data.subscriptions || []);
+        if (data.stats) setStats(data.stats);
+        if (data.pagination) setPagination(data.pagination);
+      } else {
+        toast.error('Failed to load user subscriptions.');
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Error fetching subscriptions.');
+    } finally {
+      setTrackingLoading(false);
+    }
+  }, [page, search, statusFilter, planFilter, cycleFilter, platformFilter]);
+
+  // 2. Fetch Plans Catalog
   const fetchPlans = async () => {
-    setLoading(true);
+    setPlansLoading(true);
     try {
       const supabase = createClient();
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
       const res = await fetch('/api/subscriptions/plans', {
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`
-        }
+        headers: { 'Authorization': `Bearer ${session.access_token}` }
       });
 
       if (res.ok) {
@@ -46,14 +127,27 @@ export default function SubscriptionsPage() {
       console.error(err);
       toast.error('Error fetching plans.');
     } finally {
-      setLoading(false);
+      setPlansLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchPlans();
-  }, []);
+    fetchSubscriptions();
+  }, [fetchSubscriptions]);
 
+  useEffect(() => {
+    if (activeTab === 'plans') {
+      fetchPlans();
+    }
+  }, [activeTab]);
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPage(1);
+    fetchSubscriptions();
+  };
+
+  // Plan Form actions
   const handleSavePlan = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name) return;
@@ -138,9 +232,7 @@ export default function SubscriptionsPage() {
 
       const res = await fetch(`/api/subscriptions/${id}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`
-        }
+        headers: { 'Authorization': `Bearer ${session.access_token}` }
       });
 
       if (res.ok) {
@@ -200,230 +292,545 @@ export default function SubscriptionsPage() {
 
   return (
     <div style={styles.container}>
+      {/* Header */}
       <div className="flex-between">
         <div>
-          <h1 className="title-large">Subscription Plans</h1>
-          <p style={styles.subtitle}>Configure pricing models, Apple IDs and features split</p>
+          <h1 className="title-large">Subscriptions & Revenue Tracking</h1>
+          <p style={styles.subtitle}>
+            Monitor customer subscriptions, Pro trial conversions, estimated MRR, and configure plan tiers.
+          </p>
         </div>
-        {!showAddForm && (
-          <button className="btn btn-primary" onClick={() => setShowAddForm(true)}>
-            <Plus size={16} />
-            <span>Create Plan</span>
-          </button>
-        )}
       </div>
 
-      {showAddForm && (
-        <div className="card animate-fade-in" style={{ maxWidth: '800px' }}>
-          <h3 className="title-medium" style={{ marginBottom: '1.5rem' }}>
-            {editingPlan ? `Edit Tier: ${editingPlan.name}` : 'Create Pricing Plan'}
-          </h3>
-          <form onSubmit={handleSavePlan} style={styles.formGrid}>
-            <div className="form-group">
-              <label className="form-label" htmlFor="plan-name">Plan Name</label>
-              <input
-                id="plan-name"
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
+      {/* KPI Stats Grid */}
+      <div style={styles.kpiGrid}>
+        <div style={styles.kpiCard}>
+          <div style={styles.kpiHeader}>
+            <span style={styles.kpiTitle}>Estimated MRR</span>
+            <div style={{ ...styles.kpiIcon, backgroundColor: 'rgba(76, 175, 80, 0.1)', color: '#4CAF50' }}>
+              <DollarSign size={18} />
+            </div>
+          </div>
+          <div style={{ ...styles.kpiValue, color: '#16A34A' }}>${stats.estimatedMrr}</div>
+          <div style={styles.kpiSub}>Monthly recurring revenue</div>
+        </div>
+
+        <div style={styles.kpiCard}>
+          <div style={styles.kpiHeader}>
+            <span style={styles.kpiTitle}>Paying Subscribers</span>
+            <div style={{ ...styles.kpiIcon, backgroundColor: 'rgba(33, 150, 243, 0.1)', color: '#2196F3' }}>
+              <TrendingUp size={18} />
+            </div>
+          </div>
+          <div style={styles.kpiValue}>{stats.activePaid}</div>
+          <div style={styles.kpiSub}>{stats.activePaidPro} Pro &bull; {stats.activePaidVip} VIP</div>
+        </div>
+
+        <div style={styles.kpiCard}>
+          <div style={styles.kpiHeader}>
+            <span style={styles.kpiTitle}>In Pro Trial</span>
+            <div style={{ ...styles.kpiIcon, backgroundColor: 'rgba(255, 152, 0, 0.1)', color: '#FF9800' }}>
+              <Clock size={18} />
+            </div>
+          </div>
+          <div style={{ ...styles.kpiValue, color: '#D97706' }}>{stats.activeTrials}</div>
+          <div style={styles.kpiSub}>Active trial users</div>
+        </div>
+
+        <div style={styles.kpiCard}>
+          <div style={styles.kpiHeader}>
+            <span style={styles.kpiTitle}>Cancelled / Churned</span>
+            <div style={{ ...styles.kpiIcon, backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#EF4444' }}>
+              <AlertTriangle size={18} />
+            </div>
+          </div>
+          <div style={{ ...styles.kpiValue, color: '#DC2626' }}>{stats.canceled}</div>
+          <div style={styles.kpiSub}>Total cancellations</div>
+        </div>
+
+        <div style={styles.kpiCard}>
+          <div style={styles.kpiHeader}>
+            <span style={styles.kpiTitle}>Total Records</span>
+            <div style={{ ...styles.kpiIcon, backgroundColor: 'rgba(100, 116, 139, 0.1)', color: '#64748B' }}>
+              <CreditCard size={18} />
+            </div>
+          </div>
+          <div style={styles.kpiValue}>{stats.total}</div>
+          <div style={styles.kpiSub}>All subscription records</div>
+        </div>
+      </div>
+
+      {/* Main Tab Switcher */}
+      <div style={styles.tabBar}>
+        <button
+          onClick={() => setActiveTab('tracking')}
+          style={{
+            ...styles.tabButton,
+            ...(activeTab === 'tracking' ? styles.tabButtonActive : {})
+          }}
+        >
+          <CreditCard size={16} />
+          <span>Live User Subscriptions</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('plans')}
+          style={{
+            ...styles.tabButton,
+            ...(activeTab === 'plans' ? styles.tabButtonActive : {})
+          }}
+        >
+          <Settings size={16} />
+          <span>Plan Catalog & Pricing</span>
+        </button>
+      </div>
+
+      {/* TAB 1: Live User Subscriptions Tracking */}
+      {activeTab === 'tracking' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          {/* Search & Filter Bar */}
+          <div className="card" style={styles.filterCard}>
+            <form onSubmit={handleSearchSubmit} style={styles.searchForm}>
+              <div style={styles.searchInputWrapper}>
+                <Search size={18} style={styles.searchIcon} />
+                <input
+                  type="text"
+                  placeholder="Search by user email or name..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="input-field"
+                  style={styles.searchInput}
+                />
+              </div>
+              <button type="submit" className="btn btn-primary">Filter</button>
+            </form>
+
+            <div style={styles.selectGroup}>
+              <select
+                value={statusFilter}
+                onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
                 className="input-field"
-                required
-              />
-            </div>
+                style={styles.selectInput}
+              >
+                <option value="">All Statuses</option>
+                <option value="active">Active</option>
+                <option value="trialing">In Trial</option>
+                <option value="canceled">Canceled</option>
+                <option value="expired">Expired</option>
+              </select>
 
-            <div className="form-group">
-              <label className="form-label" htmlFor="plan-rank">Rank (Sort Order)</label>
-              <input
-                id="plan-rank"
-                type="number"
-                value={rank}
-                onChange={(e) => setRank(Number(e.target.value))}
+              <select
+                value={planFilter}
+                onChange={(e) => { setPlanFilter(e.target.value); setPage(1); }}
                 className="input-field"
-                required
-              />
-            </div>
+                style={styles.selectInput}
+              >
+                <option value="">All Plans</option>
+                <option value="Pro">Pro (Paid)</option>
+                <option value="Pro_Trial">Pro Trial</option>
+                <option value="VIP">VIP</option>
+              </select>
 
-            <div className="form-group" style={{ gridColumn: 'span 2' }}>
-              <label className="form-label" htmlFor="plan-desc">Description</label>
-              <input
-                id="plan-desc"
-                type="text"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
+              <select
+                value={cycleFilter}
+                onChange={(e) => { setCycleFilter(e.target.value); setPage(1); }}
                 className="input-field"
-              />
-            </div>
+                style={styles.selectInput}
+              >
+                <option value="">All Cycles</option>
+                <option value="monthly">Monthly</option>
+                <option value="yearly">Yearly</option>
+              </select>
 
-            <div className="form-group">
-              <label className="form-label" htmlFor="price-monthly">Monthly Price ($)</label>
-              <input
-                id="price-monthly"
-                type="number"
-                step="0.01"
-                value={priceMonthly}
-                onChange={(e) => setPriceMonthly(Number(e.target.value))}
+              <select
+                value={platformFilter}
+                onChange={(e) => { setPlatformFilter(e.target.value); setPage(1); }}
                 className="input-field"
-                required
-              />
+                style={styles.selectInput}
+              >
+                <option value="">All Platforms</option>
+                <option value="ios">iOS</option>
+                <option value="android">Android</option>
+                <option value="admin">Web / Admin</option>
+              </select>
             </div>
+          </div>
 
-            <div className="form-group">
-              <label className="form-label" htmlFor="price-yearly">Yearly Price ($)</label>
-              <input
-                id="price-yearly"
-                type="number"
-                step="0.01"
-                value={priceYearly}
-                onChange={(e) => setPriceYearly(Number(e.target.value))}
-                className="input-field"
-                required
-              />
+          {/* Subscriptions Table */}
+          {trackingLoading ? (
+            <div style={styles.loadingContainer}>
+              <div style={styles.spinner}></div>
+              <p>Fetching user subscriptions...</p>
             </div>
+          ) : (
+            <div className="table-container">
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th>User</th>
+                    <th>Plan / Tier</th>
+                    <th>Subscription Status</th>
+                    <th>Billing Cycle</th>
+                    <th>Platform</th>
+                    <th>Period Start</th>
+                    <th>End / Renewal</th>
+                    <th style={{ textAlign: 'right' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {subscriptions.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} style={styles.emptyCell}>
+                        No subscriptions found matching the selected filters.
+                      </td>
+                    </tr>
+                  ) : (
+                    subscriptions.map((sub: any) => {
+                      const u = sub.users;
+                      const isSubTrial = sub.billing_mode === 'trial' || 
+                        sub.status === 'trialing' || 
+                        u?.trial_status === 'active' || 
+                        (u?.trial_status === 'expired' && sub.status === 'expired') ||
+                        (sub.status === 'expired' && !sub.areeba_subscription_reference && sub.billing_mode !== 'iap' && sub.billing_mode !== 'complimentary');
+                      const isVip = sub.subscription_plans?.name?.toLowerCase() === 'vip';
 
-            <div className="form-group" style={{ gridColumn: 'span 2' }}>
-              <label className="form-label" htmlFor="plan-features">Features (One per line)</label>
-              <textarea
-                id="plan-features"
-                rows={4}
-                value={features}
-                onChange={(e) => setFeatures(e.target.value)}
-                className="input-field"
-                style={{ fontFamily: 'sans-serif', resize: 'vertical' }}
-              />
-            </div>
+                      let trialDays = null;
+                      if (isSubTrial && (sub.current_period_end || u?.trial_ends_at)) {
+                        const targetEnd = sub.current_period_end || u?.trial_ends_at;
+                        trialDays = Math.max(0, Math.ceil((new Date(targetEnd).getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+                      }
 
-            <div className="form-group">
-              <label className="form-label" htmlFor="apple-monthly">Apple Product ID Monthly</label>
-              <input
-                id="apple-monthly"
-                type="text"
-                placeholder="com.aimeal.pro.monthly"
-                value={appleMonthly}
-                onChange={(e) => setAppleMonthly(e.target.value)}
-                className="input-field"
-              />
+                      return (
+                        <tr key={sub.id}>
+                          <td>
+                            {u ? (
+                              <Link href={`/dashboard/users/${u.id}`} style={{ display: 'flex', flexDirection: 'column' }}>
+                                <span style={styles.userName}>{u.name || 'Unnamed User'}</span>
+                                <span style={styles.userEmail}>{u.email}</span>
+                              </Link>
+                            ) : (
+                              <span style={{ color: '#94A3B8' }}>User {sub.user_id?.slice(0, 8)}...</span>
+                            )}
+                          </td>
+                          <td>
+                            {isVip ? (
+                              <span className="badge badge-primary">VIP</span>
+                            ) : isSubTrial ? (
+                              <span className="badge" style={{ backgroundColor: '#FEF3C7', color: '#B45309', border: '1px solid #FDE68A', fontWeight: 600 }}>
+                                Pro Trial
+                              </span>
+                            ) : (
+                              <span className="badge badge-info">Pro</span>
+                            )}
+                          </td>
+                          <td>
+                            {isSubTrial && sub.status === 'active' ? (
+                              <span className="badge" style={{ backgroundColor: '#FEF3C7', color: '#B45309', border: '1px solid #FDE68A' }}>
+                                Pro Trial ({trialDays}d left)
+                              </span>
+                            ) : isSubTrial && sub.status === 'expired' ? (
+                              <span className="badge badge-error">
+                                Trial Expired
+                              </span>
+                            ) : (
+                              <span className={`badge ${sub.status === 'active' ? 'badge-success' : 'badge-error'}`}>
+                                {sub.status}
+                              </span>
+                            )}
+                          </td>
+                          <td>
+                            <span style={{ textTransform: 'capitalize' }}>
+                              {sub.billing_cycle || 'N/A'}
+                            </span>
+                          </td>
+                          <td>
+                            {(() => {
+                              const prov = (sub.billing_provider || '').toLowerCase();
+                              const userPlat = (u?.device_platform || '').toLowerCase();
+                              if (prov === 'apple' || (!prov && userPlat === 'ios')) {
+                                return (
+                                  <span className="badge badge-info" style={{ fontSize: '0.75rem' }}>
+                                    iOS
+                                  </span>
+                                );
+                              }
+                              if (prov === 'google' || (!prov && userPlat === 'android')) {
+                                return (
+                                  <span className="badge badge-success" style={{ fontSize: '0.75rem' }}>
+                                    Android
+                                  </span>
+                                );
+                              }
+                              if (prov === 'areeba') {
+                                return (
+                                  <span className="badge badge-warning" style={{ fontSize: '0.75rem' }}>
+                                    {userPlat === 'android' ? 'Android' : (userPlat === 'ios' ? 'iOS' : 'Web / Admin')}
+                                  </span>
+                                );
+                              }
+                              return (
+                                <span className="badge badge-neutral" style={{ fontSize: '0.75rem' }}>
+                                  Web / Admin
+                                </span>
+                              );
+                            })()}
+                          </td>
+                          <td style={styles.dateCell}>
+                            {sub.current_period_start ? new Date(sub.current_period_start).toLocaleDateString() : 'N/A'}
+                          </td>
+                          <td style={styles.dateCell}>
+                            {sub.current_period_end ? new Date(sub.current_period_end).toLocaleDateString() : 'None'}
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                              {u?.id && (
+                                <Link
+                                  href={`/dashboard/users/${u.id}/subscription`}
+                                  className="btn btn-outline"
+                                  style={{ padding: '0.375rem 0.75rem', fontSize: '0.75rem', gap: '0.25rem' }}
+                                >
+                                  <span>Manage</span>
+                                  <ExternalLink size={12} />
+                                </Link>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
             </div>
+          )}
 
-            <div className="form-group">
-              <label className="form-label" htmlFor="apple-yearly">Apple Product ID Yearly</label>
-              <input
-                id="apple-yearly"
-                type="text"
-                placeholder="com.aimeal.pro.yearly"
-                value={appleYearly}
-                onChange={(e) => setAppleYearly(e.target.value)}
-                className="input-field"
-              />
+          {/* Pagination Footer */}
+          {!trackingLoading && pagination.pages > 1 && (
+            <div style={styles.paginationContainer}>
+              <div style={styles.paginationInfo}>
+                Showing page {pagination.page} of {pagination.pages} ({pagination.total} total subscriptions)
+              </div>
+              <div style={styles.paginationButtons}>
+                <button
+                  className="btn btn-outline btn-icon"
+                  disabled={page <= 1}
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                >
+                  <ChevronLeft size={18} />
+                </button>
+                <button
+                  className="btn btn-outline btn-icon"
+                  disabled={page >= pagination.pages}
+                  onClick={() => setPage(p => p + 1)}
+                >
+                  <ChevronRight size={18} />
+                </button>
+              </div>
             </div>
-
-            <div className="form-group">
-              <label className="form-label" htmlFor="areeba-code">Areeba Product Code (Android)</label>
-              <input
-                id="areeba-code"
-                type="text"
-                placeholder="PRO_CYCLE"
-                value={areebaCode}
-                onChange={(e) => setAreebaCode(e.target.value)}
-                className="input-field"
-              />
-            </div>
-
-            <div className="form-group flex-center" style={{ flexDirection: 'row', justifyContent: 'flex-start', gap: '0.75rem', marginTop: '1.25rem' }}>
-              <input
-                type="checkbox"
-                id="plan-active"
-                checked={active}
-                onChange={(e) => setActive(e.target.checked)}
-                style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-              />
-              <label className="form-label" htmlFor="plan-active" style={{ cursor: 'pointer' }}>Active and Visible to Users</label>
-            </div>
-
-            <div style={{ gridColumn: 'span 2', display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.5rem' }}>
-              <button type="button" className="btn btn-outline" onClick={resetForm}>Cancel</button>
-              <button type="submit" className="btn btn-primary">Save Pricing Tier</button>
-            </div>
-          </form>
+          )}
         </div>
       )}
 
-      {/* Plans List Grid */}
-      {loading ? (
-        <div style={styles.loadingContainer}>
-          <div style={styles.spinner}></div>
-          <p>Loading plans list...</p>
-        </div>
-      ) : (
-        <div style={styles.plansGrid}>
-          {plans.length === 0 ? (
-            <p style={styles.emptyText}>No pricing plans created yet.</p>
-          ) : (
-            plans.map((plan) => (
-              <div key={plan.id} className="card" style={{ ...styles.planCard, borderTop: plan.active ? '4px solid var(--primary)' : '4px solid var(--text-muted)' }}>
-                <div style={styles.planHeader}>
-                  <div>
-                    <h3 style={styles.planName}>{plan.name}</h3>
-                    <p style={styles.planDesc}>{plan.description || 'No description provided'}</p>
-                  </div>
-                  <div style={styles.planActions}>
-                    <button className="btn btn-outline btn-icon" onClick={() => handleEditClick(plan)}>
-                      <Edit2 size={14} />
-                    </button>
-                    <button className="btn btn-outline btn-icon" onClick={() => handleDeletePlan(plan.id)}>
-                      <Trash2 size={14} style={{ color: 'var(--error)' }} />
-                    </button>
-                  </div>
+      {/* TAB 2: Plan Catalog & Pricing Configuration */}
+      {activeTab === 'plans' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          <div className="flex-between">
+            <div>
+              <h2 className="title-medium">Tier Pricing Models</h2>
+              <p style={styles.subtitle}>Manage features and App Store StoreKit Product IDs</p>
+            </div>
+            {!showAddForm && (
+              <button className="btn btn-primary" onClick={() => setShowAddForm(true)}>
+                <Plus size={16} />
+                <span>Create Pricing Plan</span>
+              </button>
+            )}
+          </div>
+
+          {showAddForm && (
+            <div className="card animate-fade-in" style={{ maxWidth: '800px' }}>
+              <h3 className="title-medium" style={{ marginBottom: '1.5rem' }}>
+                {editingPlan ? `Edit Tier: ${editingPlan.name}` : 'Create Pricing Plan'}
+              </h3>
+              <form onSubmit={handleSavePlan} style={styles.formGrid}>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="plan-name">Plan Name</label>
+                  <input
+                    id="plan-name"
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="input-field"
+                    required
+                  />
                 </div>
 
-                <div style={styles.pricingRow}>
-                  <div style={styles.priceItem}>
-                    <span style={styles.priceLabel}>Monthly</span>
-                    <span style={styles.priceVal}>${plan.price_monthly}</span>
-                  </div>
-                  <div style={styles.priceItem}>
-                    <span style={styles.priceLabel}>Yearly</span>
-                    <span style={styles.priceVal}>${plan.price_yearly}</span>
-                  </div>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="plan-rank">Rank (Sort Order)</label>
+                  <input
+                    id="plan-rank"
+                    type="number"
+                    value={rank}
+                    onChange={(e) => setRank(Number(e.target.value))}
+                    className="input-field"
+                    required
+                  />
                 </div>
 
-                <div style={styles.statusRow}>
-                  <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>Status:</span>
-                  <button 
-                    style={{ background: 'transparent', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center' }} 
-                    onClick={() => handleToggleActive(plan)}
-                    title={plan.active ? 'Click to deactivate' : 'Click to activate'}
-                  >
-                    {plan.active ? (
-                      <span className="badge badge-success">
-                        <span className="badge-dot"></span>
-                        Active
-                      </span>
-                    ) : (
-                      <span className="badge badge-error">
-                        <span className="badge-dot"></span>
-                        Inactive
-                      </span>
-                    )}
+                <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                  <label className="form-label" htmlFor="plan-desc">Description</label>
+                  <input
+                    id="plan-desc"
+                    type="text"
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    className="input-field"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="plan-price-m">Monthly Price ($)</label>
+                  <input
+                    id="plan-price-m"
+                    type="number"
+                    step="0.01"
+                    value={priceMonthly}
+                    onChange={(e) => setPriceMonthly(Number(e.target.value))}
+                    className="input-field"
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="plan-price-y">Yearly Price ($)</label>
+                  <input
+                    id="plan-price-y"
+                    type="number"
+                    step="0.01"
+                    value={priceYearly}
+                    onChange={(e) => setPriceYearly(Number(e.target.value))}
+                    className="input-field"
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="plan-apple-m">Apple Product ID (Monthly)</label>
+                  <input
+                    id="plan-apple-m"
+                    type="text"
+                    placeholder="com.aimeal.pro.monthly"
+                    value={appleMonthly}
+                    onChange={(e) => setAppleMonthly(e.target.value)}
+                    className="input-field"
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="plan-apple-y">Apple Product ID (Yearly)</label>
+                  <input
+                    id="plan-apple-y"
+                    type="text"
+                    placeholder="com.aimeal.pro.yearly"
+                    value={appleYearly}
+                    onChange={(e) => setAppleYearly(e.target.value)}
+                    className="input-field"
+                  />
+                </div>
+
+                <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                  <label className="form-label" htmlFor="plan-features">Features (One per line)</label>
+                  <textarea
+                    id="plan-features"
+                    rows={4}
+                    value={features}
+                    onChange={(e) => setFeatures(e.target.value)}
+                    className="input-field"
+                    style={{ resize: 'vertical' }}
+                  />
+                </div>
+
+                <div style={{ gridColumn: 'span 2', display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+                  <button type="button" className="btn btn-outline" onClick={resetForm}>Cancel</button>
+                  <button type="submit" className="btn btn-primary">
+                    {editingPlan ? 'Update Plan' : 'Save Plan'}
                   </button>
                 </div>
+              </form>
+            </div>
+          )}
 
-                <div style={styles.featuresList}>
-                  <span style={styles.featuresTitle}>Features Included:</span>
-                  {Array.isArray(plan.features) && plan.features.length > 0 ? (
-                    <ul style={styles.ul}>
-                      {plan.features.map((f: string, i: number) => (
-                        <li key={i} style={styles.li}>
-                          <Check size={14} style={{ color: 'var(--primary)', flexShrink: 0 }} />
-                          <span>{f}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>No features defined.</p>
-                  )}
-                </div>
-              </div>
-            ))
+          {plansLoading ? (
+            <div style={styles.loadingContainer}>
+              <div style={styles.spinner}></div>
+              <p>Loading plans catalog...</p>
+            </div>
+          ) : (
+            <div style={styles.plansGrid}>
+              {plans.map((p) => {
+                const featureList = Array.isArray(p.features) ? p.features : (p.features?.features || []);
+                return (
+                  <div key={p.id} className="card" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                    <div className="flex-between" style={{ marginBottom: '1rem' }}>
+                      <span className={`badge ${
+                        p.name.toLowerCase() === 'vip' ? 'badge-primary' :
+                        p.name.toLowerCase() === 'pro' ? 'badge-info' : 'badge-neutral'
+                      }`}>
+                        {p.name}
+                      </span>
+                      <button 
+                        style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}
+                        onClick={() => handleToggleActive(p)}
+                        title={p.active ? 'Deactivate' : 'Activate'}
+                      >
+                        {p.active ? <ToggleRight size={28} color="var(--primary)" /> : <ToggleLeft size={28} color="var(--text-secondary)" />}
+                      </button>
+                    </div>
+
+                    <div style={{ marginBottom: '1rem' }}>
+                      <span style={{ fontSize: '1.75rem', fontWeight: 700, color: 'var(--text-dark)' }}>
+                        ${p.price_monthly}
+                      </span>
+                      <span style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}> / month</span>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
+                        ${p.price_yearly} billed yearly
+                      </div>
+                    </div>
+
+                    <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '1.5rem', minHeight: '40px' }}>
+                      {p.description || 'No description provided.'}
+                    </p>
+
+                    <div style={{ flexGrow: 1, marginBottom: '1.5rem' }}>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 600, textTransform: 'uppercase', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
+                        Features Included
+                      </div>
+                      <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        {featureList.map((f: string, i: number) => (
+                          <li key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem' }}>
+                            <Check size={14} color="var(--primary)" />
+                            <span>{f}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: '1rem', marginTop: 'auto' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Order: {p.rank}</span>
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                          <button className="btn btn-outline btn-icon" onClick={() => handleEditClick(p)}>
+                            <Edit2 size={16} />
+                          </button>
+                          <button className="btn btn-outline btn-icon" onClick={() => handleDeletePlan(p.id)}>
+                            <Trash2 size={16} style={{ color: 'var(--error)' }} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
       )}
@@ -438,119 +845,168 @@ const styles: Record<string, React.CSSProperties> = {
     gap: '1.5rem',
   },
   subtitle: {
-    fontSize: '0.9rem',
-    color: 'var(--text-secondary)',
+    fontSize: '0.875rem',
+    color: '#64748B',
     marginTop: '0.25rem',
+  },
+  kpiGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(5, 1fr)',
+    gap: '1rem',
+  },
+  kpiCard: {
+    backgroundColor: '#FFFFFF',
+    border: '1px solid #E2E8F0',
+    borderRadius: '10px',
+    padding: '1rem',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.03)'
+  },
+  kpiHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '0.5rem'
+  },
+  kpiTitle: {
+    fontSize: '0.75rem',
+    fontWeight: 600,
+    color: '#64748B',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em'
+  },
+  kpiIcon: {
+    width: '32px',
+    height: '32px',
+    borderRadius: '8px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  kpiValue: {
+    fontSize: '1.5rem',
+    fontWeight: 700,
+    color: '#0F172A',
+    marginBottom: '0.25rem'
+  },
+  kpiSub: {
+    fontSize: '0.6875rem',
+    color: '#94A3B8'
+  },
+  tabBar: {
+    display: 'flex',
+    gap: '0.75rem',
+    borderBottom: '2px solid #E2E8F0',
+    paddingBottom: '0.5rem'
+  },
+  tabButton: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '0.5rem',
+    padding: '0.625rem 1.25rem',
+    backgroundColor: 'transparent',
+    border: 'none',
+    borderRadius: '8px',
+    fontSize: '0.875rem',
+    fontWeight: 600,
+    color: '#64748B',
+    cursor: 'pointer',
+    transition: 'all 0.15s ease'
+  },
+  tabButtonActive: {
+    backgroundColor: '#E2E8F0',
+    color: '#0F172A'
+  },
+  filterCard: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: '1rem',
+  },
+  searchForm: {
+    display: 'flex',
+    gap: '0.5rem',
+    flex: '1 1 300px',
+  },
+  searchInputWrapper: {
+    position: 'relative',
+    flex: 1,
+  },
+  searchIcon: {
+    position: 'absolute',
+    left: '12px',
+    top: '50%',
+    transform: 'translateY(-50%)',
+    color: 'var(--text-secondary)',
+  },
+  searchInput: {
+    paddingLeft: '38px',
+    width: '100%',
+  },
+  selectGroup: {
+    display: 'flex',
+    gap: '0.75rem',
+  },
+  selectInput: {
+    minWidth: '130px',
+  },
+  userCell: {
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  userName: {
+    fontWeight: 600,
+    color: 'var(--text-dark)',
+    fontSize: '0.875rem',
+  },
+  userEmail: {
+    fontSize: '0.775rem',
+    color: 'var(--text-secondary)',
+  },
+  dateCell: {
+    fontSize: '0.85rem',
+    color: 'var(--text-secondary)',
+  },
+  emptyCell: {
+    textAlign: 'center',
+    padding: '3rem 0',
+    color: 'var(--text-secondary)',
+  },
+  paginationContainer: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: '0.5rem',
+  },
+  paginationInfo: {
+    fontSize: '0.875rem',
+    color: 'var(--text-secondary)',
+  },
+  paginationButtons: {
+    display: 'flex',
+    gap: '0.5rem',
+  },
+  plansGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+    gap: '1.5rem',
   },
   formGrid: {
     display: 'grid',
     gridTemplateColumns: '1fr 1fr',
-    gap: '1.25rem',
-  },
-  plansGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-    gap: '1.5rem',
-    marginTop: '1rem',
-  },
-  planCard: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '1.25rem',
-    minHeight: '380px',
-  },
-  planHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-  },
-  planName: {
-    fontSize: '1.25rem',
-    fontWeight: 700,
-    color: 'var(--text-dark)',
-  },
-  planDesc: {
-    fontSize: '0.8rem',
-    color: 'var(--text-secondary)',
-    marginTop: '0.25rem',
-  },
-  planActions: {
-    display: 'flex',
-    gap: '0.5rem',
-  },
-  pricingRow: {
-    display: 'flex',
-    gap: '1.5rem',
-    padding: '0.75rem',
-    backgroundColor: '#F8F9FA',
-    borderRadius: 'var(--radius-sm)',
-  },
-  priceItem: {
-    display: 'flex',
-    flexDirection: 'column',
-    flexGrow: 1,
-  },
-  priceLabel: {
-    fontSize: '0.7rem',
-    color: 'var(--text-muted)',
-    textTransform: 'uppercase',
-    fontWeight: 600,
-  },
-  priceVal: {
-    fontSize: '1.25rem',
-    fontWeight: 800,
-    color: 'var(--text-dark)',
-  },
-  statusRow: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderBottom: '1px solid #F1F5F9',
-    paddingBottom: '0.75rem',
-  },
-  featuresList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '0.5rem',
-  },
-  featuresTitle: {
-    fontSize: '0.75rem',
-    fontWeight: 700,
-    color: 'var(--text-secondary)',
-    textTransform: 'uppercase',
-  },
-  ul: {
-    listStyleType: 'none',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '0.4rem',
-  },
-  li: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.5rem',
-    fontSize: '0.85rem',
-    color: 'var(--text-primary)',
-  },
-  emptyText: {
-    fontSize: '0.875rem',
-    color: 'var(--text-secondary)',
-    textAlign: 'center',
-    gridColumn: '1 / -1',
-    padding: '3rem 0',
+    gap: '1rem',
   },
   loadingContainer: {
-    padding: '6rem 0',
+    padding: '4rem 0',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    justifyContent: 'center',
     gap: '1rem',
     color: 'var(--text-secondary)',
   },
   spinner: {
-    width: '36px',
-    height: '36px',
+    width: '32px',
+    height: '32px',
     borderRadius: '50%',
     border: '3px solid #CBD5E1',
     borderTopColor: 'var(--primary)',

@@ -33,8 +33,9 @@ const navItems = [
   { name: 'Referral Tracking', href: '/dashboard/referral-tracking', icon: Link2 },
   { name: 'Sponsor Payments', href: '/dashboard/sponsor-payments', icon: Wallet },
   { name: 'Notifications', href: '/dashboard/notifications', icon: Bell },
-  { name: 'Meals', href: '/dashboard/meals', icon: Utensils },
-  { name: 'Logs & Audits', href: '/dashboard/logs', icon: FileText },
+  // Temporarily hidden upon admin request:
+  // { name: 'Meals', href: '/dashboard/meals', icon: Utensils },
+  // { name: 'Logs & Audits', href: '/dashboard/logs', icon: FileText },
   { name: 'Settings', href: '/dashboard/settings', icon: Settings },
 ];
 
