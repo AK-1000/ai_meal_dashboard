@@ -7,11 +7,13 @@ export const GET = withAdminAuth(async (req: NextRequest) => {
     const [
       { data: sponsors, error: sponsorsErr },
       { data: allReferrals, error: refErr },
-      { data: referredUsers, error: usersErr }
+      { data: referredUsers, error: usersErr },
+      { data: allCodes, error: codesErr }
     ] = await Promise.all([
       supabaseAdmin.from('sponsors').select('*').order('created_at', { ascending: false }),
       supabaseAdmin.from('referral_tracking').select('sponsor_id, payment_status, commission_amount, referral_type'),
-      supabaseAdmin.from('users').select('referred_by_sponsor_id, subscription_status')
+      supabaseAdmin.from('users').select('referred_by_sponsor_id, subscription_status'),
+      supabaseAdmin.from('promo_codes').select('id, sponsor_id, code, status, free_days, expires_at, never_expires, total_uses').order('created_at', { ascending: true })
     ]);
 
     if (sponsorsErr) throw sponsorsErr;
@@ -20,6 +22,8 @@ export const GET = withAdminAuth(async (req: NextRequest) => {
     const enhancedSponsors = (sponsors || []).map((s) => {
       const sponsorRefs = (allReferrals || []).filter(r => r.sponsor_id === s.id);
       const sponsorUsers = (referredUsers || []).filter(u => u.referred_by_sponsor_id === s.id);
+      const sponsorCodes = (allCodes || []).filter(c => c.sponsor_id === s.id);
+      const primaryCode = sponsorCodes.find(c => c.code === s.code_prefix)?.code || s.code_prefix || sponsorCodes[0]?.code || '—';
       
       const totalReferrals = sponsorUsers.length || s.total_referrals || sponsorRefs.length;
       const activeUsers = sponsorUsers.filter(u => u.subscription_status === 'active' || u.subscription_status === 'trialing').length;
@@ -34,6 +38,8 @@ export const GET = withAdminAuth(async (req: NextRequest) => {
 
       return {
         ...s,
+        referral_codes: sponsorCodes,
+        primary_code: primaryCode,
         total_referrals_count: totalReferrals,
         active_users_count: activeUsers,
         unpaid_commission: Number(unpaidCommission.toFixed(2)),
@@ -78,13 +84,15 @@ export const POST = withAdminAuth(async (req: NextRequest, admin) => {
 
     // Automatically create the permanent referral code for the sponsor
     if (sponsor.code_prefix) {
+      const cleanCode = sponsor.code_prefix.trim().toUpperCase();
       const { error: promoError } = await supabaseAdmin
         .from('promo_codes')
         .insert({
-          code: sponsor.code_prefix,
+          code: cleanCode,
           sponsor_id: sponsor.id,
           status: sponsor.status === 'active' ? 'active' : 'inactive',
-          free_days: sponsor.default_free_days || null,
+          free_days: sponsor.default_free_days || 7,
+          never_expires: true,
           expires_at: null
         });
         

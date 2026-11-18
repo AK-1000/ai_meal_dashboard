@@ -26,6 +26,38 @@ export const PATCH = withAdminAuth(async (req: NextRequest, admin) => {
 
     if (error) throw error;
 
+    // Keep primary promo code in sync
+    if (sponsor.code_prefix) {
+      const cleanCode = sponsor.code_prefix.toUpperCase().trim();
+      const { data: existingCode } = await supabaseAdmin
+        .from('promo_codes')
+        .select('id')
+        .eq('sponsor_id', sponsorId)
+        .eq('code', (oldSponsor?.code_prefix || sponsor.code_prefix).toUpperCase().trim())
+        .maybeSingle();
+
+      if (existingCode) {
+        await supabaseAdmin
+          .from('promo_codes')
+          .update({
+            code: cleanCode,
+            status: sponsor.status === 'active' ? 'active' : 'inactive',
+            free_days: sponsor.default_free_days || 7,
+          })
+          .eq('id', existingCode.id);
+      } else {
+        await supabaseAdmin
+          .from('promo_codes')
+          .insert({
+            code: cleanCode,
+            sponsor_id: sponsorId,
+            status: sponsor.status === 'active' ? 'active' : 'inactive',
+            free_days: sponsor.default_free_days || 7,
+            never_expires: true,
+          });
+      }
+    }
+
     await logAdminAction(
       admin.id,
       'sponsor.update',

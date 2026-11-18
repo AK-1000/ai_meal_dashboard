@@ -16,6 +16,14 @@ export const PATCH = withAdminAuth(async (req: NextRequest, admin) => {
       updateData.status = is_active ? 'active' : 'inactive';
     }
 
+    if (updateData.code) {
+      updateData.code = updateData.code.toUpperCase().trim();
+    }
+
+    if (updateData.expires_at !== undefined) {
+      updateData.never_expires = !updateData.expires_at;
+    }
+
     const { data: oldCode } = await supabaseAdmin
       .from('promo_codes')
       .select('*')

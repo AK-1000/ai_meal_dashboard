@@ -24,14 +24,29 @@ export const GET = withAdminAuth(async (req: NextRequest) => {
       query = query.eq('sponsor_id', sponsorId);
     }
 
-    const { data: payments, count, error } = await query
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1);
+    const [
+      { data: payments, count, error },
+      { data: allPayments },
+      { data: allUnpaidRefs }
+    ] = await Promise.all([
+      query.order('created_at', { ascending: false }).range(offset, offset + limit - 1),
+      supabaseAdmin.from('sponsor_payments').select('amount'),
+      supabaseAdmin.from('referral_tracking').select('commission_amount, sponsor_id').eq('payment_status', 'unpaid')
+    ]);
 
     if (error) throw error;
 
+    const totalPaidHistorical = (allPayments || []).reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+    const totalPendingOwed = (allUnpaidRefs || []).reduce((sum, r) => sum + (Number(r.commission_amount) || 0), 0);
+    const sponsorsWithPending = new Set((allUnpaidRefs || []).filter(r => (Number(r.commission_amount) || 0) > 0).map(r => r.sponsor_id)).size;
+
     return NextResponse.json({
       payments,
+      stats: {
+        totalPaidHistorical: Number(totalPaidHistorical.toFixed(2)),
+        totalPendingOwed: Number(totalPendingOwed.toFixed(2)),
+        sponsorsWithPending,
+      },
       pagination: {
         page,
         limit,
@@ -82,7 +97,7 @@ export const POST = withAdminAuth(async (req: NextRequest, currentAdmin) => {
 
     if (paymentErr) throw paymentErr;
 
-    // 2. Mark selected referrals as paid
+    // 2. Mark selected referrals as paid, or all unpaid referrals for this sponsor
     if (referralIds && referralIds.length > 0) {
       const { error: updateErr } = await supabaseAdmin
         .from('referral_tracking')
@@ -95,6 +110,24 @@ export const POST = withAdminAuth(async (req: NextRequest, currentAdmin) => {
 
       if (updateErr) {
         console.error('Error updating referral statuses:', updateErr);
+      }
+    } else {
+      const { data: updatedRefs, error: updateErr } = await supabaseAdmin
+        .from('referral_tracking')
+        .update({
+          payment_status: 'paid',
+          paid_in_payment_id: payment.id,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('sponsor_id', sponsorId)
+        .eq('payment_status', 'unpaid')
+        .select('id');
+
+      if (!updateErr && updatedRefs && updatedRefs.length > 0) {
+        await supabaseAdmin
+          .from('sponsor_payments')
+          .update({ referrals_covered: updatedRefs.length })
+          .eq('id', payment.id);
       }
     }
 

@@ -49,6 +49,17 @@ export const POST = withAdminAuth(async (req: NextRequest, admin) => {
       insertData.status = is_active ? 'active' : 'inactive';
     }
 
+    if (insertData.code) {
+      insertData.code = insertData.code.toUpperCase().trim();
+    }
+
+    if (!insertData.expires_at) {
+      insertData.never_expires = true;
+      insertData.expires_at = null;
+    } else {
+      insertData.never_expires = false;
+    }
+
     const { data: promoCode, error } = await supabaseAdmin
       .from('promo_codes')
       .insert(insertData)
