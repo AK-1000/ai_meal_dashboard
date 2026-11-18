@@ -4,6 +4,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 
 export const GET = withAdminAuth(async (req: NextRequest) => {
   try {
+    const nowMs = Date.now();
     const [
       { data: sponsors, error: sponsorsErr },
       { data: allReferrals, error: refErr },
@@ -12,7 +13,7 @@ export const GET = withAdminAuth(async (req: NextRequest) => {
     ] = await Promise.all([
       supabaseAdmin.from('sponsors').select('*').order('created_at', { ascending: false }),
       supabaseAdmin.from('referral_tracking').select('sponsor_id, payment_status, commission_amount, referral_type'),
-      supabaseAdmin.from('users').select('referred_by_sponsor_id, subscription_status'),
+      supabaseAdmin.from('users').select('id, referred_by_sponsor_id, subscription_status, trial_status, trial_ends_at'),
       supabaseAdmin.from('promo_codes').select('id, sponsor_id, code, status, free_days, expires_at, never_expires, total_uses').order('created_at', { ascending: true })
     ]);
 
@@ -26,7 +27,45 @@ export const GET = withAdminAuth(async (req: NextRequest) => {
       const primaryCode = sponsorCodes.find(c => c.code === s.code_prefix)?.code || s.code_prefix || sponsorCodes[0]?.code || '—';
       
       const totalReferrals = sponsorUsers.length || s.total_referrals || sponsorRefs.length;
-      const activeUsers = sponsorUsers.filter(u => u.subscription_status === 'active' || u.subscription_status === 'trialing').length;
+      
+      const paidUsers = sponsorUsers.filter(u => u.subscription_status === 'active');
+      const inTrialUsers = sponsorUsers.filter(u => 
+        u.subscription_status !== 'active' && 
+        (u.trial_status === 'active' || u.subscription_status === 'trialing') &&
+        (!u.trial_ends_at || new Date(u.trial_ends_at).getTime() > nowMs)
+      );
+      const expiredUnconvertedUsers = sponsorUsers.filter(u => 
+        u.subscription_status !== 'active' && 
+        !inTrialUsers.some(tu => tu.id === u.id)
+      );
+
+      const paidCount = paidUsers.length;
+      const inTrialCount = inTrialUsers.length;
+      const expiredCount = expiredUnconvertedUsers.length;
+      const conversionRate = totalReferrals > 0 ? Number(((paidCount / totalReferrals) * 100).toFixed(1)) : 0;
+
+      let qualityStatus: 'high_performing' | 'active_converting' | 'evaluating_trials' | 'scam_risk' | 'no_traffic' = 'no_traffic';
+      let qualityReason = 'No referred signups';
+
+      if (totalReferrals === 0) {
+        qualityStatus = 'no_traffic';
+        qualityReason = 'No signups';
+      } else if (paidCount > 0 && conversionRate >= 20) {
+        qualityStatus = 'high_performing';
+        qualityReason = `${conversionRate}% converted (${paidCount} paid)`;
+      } else if (paidCount > 0) {
+        qualityStatus = 'active_converting';
+        qualityReason = `${conversionRate}% converted (${paidCount} paid)`;
+      } else if (inTrialCount > 0 && expiredCount === 0) {
+        qualityStatus = 'evaluating_trials';
+        qualityReason = `${inTrialCount} in trial evaluation`;
+      } else if (expiredCount > 0 && paidCount === 0) {
+        qualityStatus = 'scam_risk';
+        qualityReason = `0% converted • All ${expiredCount} dropped`;
+      } else {
+        qualityStatus = 'evaluating_trials';
+        qualityReason = `${inTrialCount} evaluating, ${expiredCount} dropped`;
+      }
 
       const unpaidCommission = sponsorRefs
         .filter(r => r.payment_status === 'unpaid')
@@ -41,7 +80,13 @@ export const GET = withAdminAuth(async (req: NextRequest) => {
         referral_codes: sponsorCodes,
         primary_code: primaryCode,
         total_referrals_count: totalReferrals,
-        active_users_count: activeUsers,
+        paid_count: paidCount,
+        in_trial_count: inTrialCount,
+        expired_count: expiredCount,
+        conversion_rate: conversionRate,
+        quality_status: qualityStatus,
+        quality_reason: qualityReason,
+        active_users_count: paidCount + inTrialCount,
         unpaid_commission: Number(unpaidCommission.toFixed(2)),
         paid_commission: Number(paidCommission.toFixed(2)),
         total_commission: Number((unpaidCommission + paidCommission).toFixed(2))

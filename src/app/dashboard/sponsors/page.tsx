@@ -616,7 +616,7 @@ export default function SponsorsPage() {
                 <th>Primary Referral Code</th>
                 <th>Trial Granted</th>
                 <th>Commission</th>
-                <th>Attributed Users</th>
+                <th>Attributed Traffic & Quality</th>
                 <th>Commission Balance</th>
                 <th>Status</th>
                 <th style={{ textAlign: 'right' }}>Actions</th>
@@ -722,17 +722,78 @@ export default function SponsorsPage() {
                         </span>
                       </td>
 
-                      {/* Attributed Users */}
+                      {/* Attributed Traffic & Quality Audit */}
                       <td>
-                        <Link
-                          href={`/dashboard/referral-tracking?sponsorId=${s.id}`}
-                          style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', textDecoration: 'none', color: '#0F172A' }}
-                          title="View users referred by this sponsor"
-                        >
-                          <Users size={14} color="#64748B" />
-                          <span style={{ fontWeight: 700, textDecoration: 'underline' }}>{s.total_referrals_count || 0}</span>
-                          <span style={{ fontSize: '0.75rem', color: '#64748B' }}>users</span>
-                        </Link>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                          <Link
+                            href={`/dashboard/referral-tracking?sponsorId=${s.id}`}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.375rem', textDecoration: 'none', color: '#0F172A' }}
+                            title="View referred users for this sponsor"
+                          >
+                            <Users size={14} color="#64748B" />
+                            <strong style={{ textDecoration: 'underline' }}>{s.total_referrals_count || 0}</strong>
+                            <span style={{ fontSize: '0.75rem', color: '#64748B' }}>users</span>
+                          </Link>
+
+                          {/* Breakdown: Paid • In Trial • Dropped */}
+                          {(s.total_referrals_count || 0) > 0 && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.6875rem' }}>
+                              <span style={{ color: '#15803D', fontWeight: 600 }}>{s.paid_count || 0} paid</span>
+                              <span style={{ color: '#CBD5E1' }}>•</span>
+                              <span style={{ color: '#B45309', fontWeight: 500 }}>{s.in_trial_count || 0} in trial</span>
+                              <span style={{ color: '#CBD5E1' }}>•</span>
+                              <span style={{ color: '#DC2626', fontWeight: 500 }}>{s.expired_count || 0} dropped</span>
+                            </div>
+                          )}
+
+                          {/* Traffic Quality Tag */}
+                          {s.quality_status === 'scam_risk' ? (
+                            <span 
+                              className="badge" 
+                              style={{ 
+                                backgroundColor: '#FEF2F2', 
+                                color: '#991B1B', 
+                                border: '1px solid #FCA5A5', 
+                                fontSize: '0.6875rem', 
+                                padding: '1px 6px',
+                                width: 'fit-content',
+                                fontWeight: 700
+                              }}
+                              title="100% of trials dropped out without converting to a paid plan"
+                            >
+                              🚨 Scam Risk (0% Paid)
+                            </span>
+                          ) : s.quality_status === 'high_performing' ? (
+                            <span 
+                              className="badge" 
+                              style={{ 
+                                backgroundColor: '#F0FDF4', 
+                                color: '#166534', 
+                                border: '1px solid #86EFAC', 
+                                fontSize: '0.6875rem', 
+                                padding: '1px 6px',
+                                width: 'fit-content',
+                                fontWeight: 700
+                              }}
+                            >
+                              ⭐ {s.conversion_rate}% High Value
+                            </span>
+                          ) : s.quality_status === 'active_converting' ? (
+                            <span 
+                              className="badge badge-success" 
+                              style={{ fontSize: '0.6875rem', padding: '1px 6px', width: 'fit-content' }}
+                            >
+                              {s.conversion_rate}% Converted
+                            </span>
+                          ) : s.quality_status === 'evaluating_trials' ? (
+                            <span 
+                              className="badge" 
+                              style={{ backgroundColor: '#EFF6FF', color: '#1D4ED8', border: '1px solid #BFDBFE', fontSize: '0.6875rem', padding: '1px 6px', width: 'fit-content' }}
+                            >
+                              Evaluating Trials
+                            </span>
+                          ) : null}
+                        </div>
                       </td>
 
                       {/* Commission Balance / Payout */}
